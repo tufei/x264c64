@@ -21,11 +21,15 @@
 #ifndef X264_VISUALIZE_H
 #define X264_VISUALIZE_H
 
+#ifndef _TMS320C6400
 #include "common/common.h"
+#endif
 
+#if VISUALIZE
 void x264_visualize_init( x264_t *h );
 void x264_visualize_mb( x264_t *h );
 void x264_visualize_show( x264_t *h );
 void x264_visualize_close( x264_t *h );
+#endif /* VISUALIZE */
 
 #endif

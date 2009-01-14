@@ -29,7 +29,9 @@
 #ifdef ARCH_PPC
 #include "ppc/mc.h"
 #endif
-
+#ifdef _TMS320C6400
+#include "c64/mc.h"
+#endif
 
 static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,
                               uint8_t *src1, int i_src1_stride,
@@ -400,6 +402,9 @@ void x264_mc_init( int cpu, x264_mc_functions_t *pf )
 #ifdef ARCH_PPC
     if( cpu&X264_CPU_ALTIVEC )
         x264_mc_altivec_init( pf );
+#endif
+#ifdef _TMS320C6400
+    x264_mc_init_c64( pf );
 #endif
 }
 

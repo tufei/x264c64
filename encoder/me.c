@@ -22,7 +22,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#else
 #include "common/common.h"
+#endif
 #include "me.h"
 
 /* presets selected from good points on the speed-vs-quality curve of several test videos
@@ -153,6 +157,14 @@ static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_ite
     }\
 }
 
+#ifdef _TMS320C6400
+#pragma DATA_ALIGN(pix, 16);
+static uint8_t pix[16 * 16];
+#pragma DATA_ALIGN(zero, 16);
+static uint8_t zero[8 * FENC_STRIDE];
+#pragma DATA_ALIGN(enc_dc, 16);
+static int enc_dc[4];
+#endif /* _TMS320C6400 */
 void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, int *p_halfpel_thresh )
 {
     const int bw = x264_pixel_size[m->i_pixel].w;
@@ -163,7 +175,9 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
     int bpred_mx = 0, bpred_my = 0, bpred_cost = COST_MAX;
     int omx, omy, pmx, pmy;
     uint8_t *p_fref = m->p_fref[0];
+#ifndef _TMS320C6400
     DECLARE_ALIGNED_16( uint8_t pix[16*16] );
+#endif
 
     int i, j;
     int dir;
@@ -192,7 +206,11 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         COST_MV_HPEL( bmx, bmy );
         for( i = 0; i < i_mvc; i++ )
         {
+#ifdef _TMS320C6400
+            if( _mem4(mvc[i]) && (bmv - _mem4(mvc[i])) )
+#else
             if( *(uint32_t*)mvc[i] && (bmv - *(uint32_t*)mvc[i]) )
+#endif
             {
                 int mx = x264_clip3( mvc[i][0], mv_x_min*4, mv_x_max*4 );
                 int my = x264_clip3( mvc[i][1], mv_y_min*4, mv_y_max*4 );
@@ -470,8 +488,10 @@ me_hex2:
             /* due to a GCC bug on some platforms (win32?), zero[] may not actually be aligned.
              * unlike the similar case in ratecontrol.c, this is not a problem because it is not used for any
              * SSE instructions and the only loss is a tiny bit of performance. */
+#ifndef _TMS320C6400
             DECLARE_ALIGNED_16( static uint8_t zero[8*FENC_STRIDE] );
             DECLARE_ALIGNED_16( int enc_dc[4] );
+#endif
             int sad_size = i_pixel <= PIXEL_8x8 ? PIXEL_8x8 : PIXEL_4x4;
             int delta = x264_pixel_size[sad_size].w;
             int16_t xs_buf[64];
@@ -651,6 +671,144 @@ void x264_me_refine_qpel( x264_t *h, x264_me_t *m )
     refine_subpel( h, m, hpel, qpel, NULL, 1 );
 }
 
+#ifdef _TMS320C6400
+#define COST_MV_SAD( mx, my ) \
+{ \
+    int stride = 16; \
+    uint8_t *src = h->mc.get_ref( pix_0[0], &stride, m->p_fref, m->i_stride[0], mx, my, bw, bh ); \
+    int cost = h->pixf.fpelcmp[i_pixel]( m->p_fenc[0], FENC_STRIDE, src, stride ) \
+             + p_cost_mvx[ mx ] + p_cost_mvy[ my ]; \
+    COPY3_IF_LT( bcost, cost, bmx, mx, bmy, my ); \
+}
+
+#define COST_MV_SATD( mx, my, dir ) \
+if( b_refine_qpel || (dir^1) != odir ) \
+{ \
+    int stride = 16; \
+    uint8_t *src = h->mc.get_ref( pix_0[0], &stride, m->p_fref, m->i_stride[0], mx, my, bw, bh ); \
+    int cost = h->pixf.mbcmp_unaligned[i_pixel]( m->p_fenc[0], FENC_STRIDE, src, stride ) \
+             + p_cost_mvx[ mx ] + p_cost_mvy[ my ]; \
+    if( b_chroma_me && cost < bcost ) \
+    { \
+        h->mc.mc_chroma( pix_0[0], 8, m->p_fref[4], m->i_stride[1], mx, my, bw/2, bh/2 ); \
+        cost += h->pixf.mbcmp[i_pixel+3]( m->p_fenc[1], FENC_STRIDE, pix_0[0], 8 ); \
+        if( cost < bcost ) \
+        { \
+            h->mc.mc_chroma( pix_0[0], 8, m->p_fref[5], m->i_stride[1], mx, my, bw/2, bh/2 ); \
+            cost += h->pixf.mbcmp[i_pixel+3]( m->p_fenc[2], FENC_STRIDE, pix_0[0], 8 ); \
+        } \
+    } \
+    if( cost < bcost ) \
+    {                  \
+        bcost = cost;  \
+        bmx = mx;      \
+        bmy = my;      \
+        bdir = dir;    \
+    } \
+}
+
+#pragma DATA_ALIGN(pix_0, 16);
+static uint8_t pix_0[2][32 * 18];
+
+static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_iters, int *p_halfpel_thresh, int b_refine_qpel )
+{
+    const int bw = x264_pixel_size[m->i_pixel].w;
+    const int bh = x264_pixel_size[m->i_pixel].h;
+    const int16_t *p_cost_mvx = m->p_cost_mv - m->mvp[0];
+    const int16_t *p_cost_mvy = m->p_cost_mv - m->mvp[1];
+    const int i_pixel = m->i_pixel;
+    const int b_chroma_me = h->mb.b_chroma_me && i_pixel <= PIXEL_8x8;
+
+    int omx, omy;
+    int i;
+
+    int bmx = m->mv[0];
+    int bmy = m->mv[1];
+    int bcost = m->cost;
+    int odir = -1, bdir;
+
+    /* try the subpel component of the predicted mv */
+    if( hpel_iters && h->mb.i_subpel_refine < 3 )
+    {
+        int mx = x264_clip3( m->mvp[0], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+        int my = x264_clip3( m->mvp[1], h->mb.mv_min_spel[1], h->mb.mv_max_spel[1] );
+        if( (mx-bmx)|(my-bmy) )
+            COST_MV_SAD( mx, my );
+    }
+
+    /* halfpel diamond search */
+    for( i = hpel_iters; i > 0; i-- )
+    {
+        int omx = bmx, omy = bmy;
+        int costs[4];
+        int stride = 32; // candidates are either all hpel or all qpel, so one stride is enough
+        uint8_t *src0, *src1, *src2, *src3;
+        src0 = h->mc.get_ref( pix_0[0], &stride, m->p_fref, m->i_stride[0], omx, omy-2, bw, bh+1 );
+        src2 = h->mc.get_ref( pix_0[1], &stride, m->p_fref, m->i_stride[0], omx-2, omy, bw+4, bh );
+        src1 = src0 + stride;
+        src3 = src2 + 1;
+        h->pixf.fpelcmp_x4[i_pixel]( m->p_fenc[0], src0, src1, src2, src3, stride, costs );
+        COPY2_IF_LT( bcost, costs[0] + p_cost_mvx[omx  ] + p_cost_mvy[omy-2], bmy, omy-2 );
+        COPY2_IF_LT( bcost, costs[1] + p_cost_mvx[omx  ] + p_cost_mvy[omy+2], bmy, omy+2 );
+        COPY3_IF_LT( bcost, costs[2] + p_cost_mvx[omx-2] + p_cost_mvy[omy  ], bmx, omx-2, bmy, omy );
+        COPY3_IF_LT( bcost, costs[3] + p_cost_mvx[omx+2] + p_cost_mvy[omy  ], bmx, omx+2, bmy, omy );
+        if( (bmx == omx) & (bmy == omy) )
+            break;
+    }
+
+    if( !b_refine_qpel )
+    {
+        /* check for mvrange */
+        if( bmy > h->mb.mv_max_spel[1] )
+            bmy = h->mb.mv_max_spel[1];
+        bcost = COST_MAX;
+        COST_MV_SATD( bmx, bmy, -1 );
+    }
+
+    /* early termination when examining multiple reference frames */
+    if( p_halfpel_thresh )
+    {
+        if( (bcost*7)>>3 > *p_halfpel_thresh )
+        {
+            m->cost = bcost;
+            m->mv[0] = bmx;
+            m->mv[1] = bmy;
+            // don't need cost_mv
+            return;
+        }
+        else if( bcost < *p_halfpel_thresh )
+            *p_halfpel_thresh = bcost;
+    }
+
+    /* quarterpel diamond search */
+    bdir = -1;
+    for( i = qpel_iters; i > 0; i-- )
+    {
+        odir = bdir;
+        omx = bmx;
+        omy = bmy;
+        COST_MV_SATD( omx, omy - 1, 0 );
+        COST_MV_SATD( omx, omy + 1, 1 );
+        COST_MV_SATD( omx - 1, omy, 2 );
+        COST_MV_SATD( omx + 1, omy, 3 );
+        if( bmx == omx && bmy == omy )
+            break;
+    }
+
+    /* check for mvrange */
+    if( bmy > h->mb.mv_max_spel[1] )
+    {
+        bmy = h->mb.mv_max_spel[1];
+        bcost = COST_MAX;
+        COST_MV_SATD( bmx, bmy, -1 );
+    }
+
+    m->cost = bcost;
+    m->mv[0] = bmx;
+    m->mv[1] = bmy;
+    m->cost_mv = p_cost_mvx[ bmx ] + p_cost_mvy[ bmy ];
+}
+#else
 #define COST_MV_SAD( mx, my ) \
 { \
     int stride = 16; \
@@ -785,7 +943,158 @@ static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_ite
     m->mv[1] = bmy;
     m->cost_mv = p_cost_mvx[ bmx ] + p_cost_mvy[ bmy ];
 }
+#endif /* _TMS320C6400 */
 
+#ifdef _TMS320C6400
+#define BIME_CACHE( dx, dy ) \
+{ \
+    int i = 4 + 3*dx + dy; \
+    stride0[i] = bw;\
+    stride1[i] = bw;\
+    src0[i] = h->mc.get_ref( pix0[i], &stride0[i], m0->p_fref, m0->i_stride[0], om0x+dx, om0y+dy, bw, bh ); \
+    src1[i] = h->mc.get_ref( pix1[i], &stride1[i], m1->p_fref, m1->i_stride[0], om1x+dx, om1y+dy, bw, bh ); \
+}
+
+#define BIME_CACHE2(a,b) \
+    BIME_CACHE(a,b) \
+    BIME_CACHE(-(a),-(b))
+
+#define SATD_THRESH 17/16
+
+#define COST_BIMV_SATD( m0x, m0y, m1x, m1y ) \
+if( pass == 0 || !((visited[(m0x)&7][(m0y)&7][(m1x)&7] & (1<<((m1y)&7)))) ) \
+{ \
+    int cost; \
+    int i0 = 4 + 3*(m0x-om0x) + (m0y-om0y); \
+    int i1 = 4 + 3*(m1x-om1x) + (m1y-om1y); \
+    visited[(m0x)&7][(m0y)&7][(m1x)&7] |= (1<<((m1y)&7));\
+    h->mc.avg[i_pixel]( pix_1, bw, src0[i0], stride0[i0], src1[i1], stride1[i1], i_weight ); \
+    cost = h->pixf.mbcmp[i_pixel]( m0->p_fenc[0], FENC_STRIDE, pix_1, bw ) \
+         + p_cost_m0x[ m0x ] + p_cost_m0y[ m0y ] \
+         + p_cost_m1x[ m1x ] + p_cost_m1y[ m1y ]; \
+    if( rd ) \
+    { \
+        if( cost < bcost * SATD_THRESH ) \
+        { \
+            uint64_t costrd; \
+            if( cost < bcost ) \
+                bcost = cost; \
+            _mem4(cache0_mv) = _mem4(cache0_mv2) = pack16to32_mask(m0x,m0y); \
+            _mem4(cache1_mv) = _mem4(cache1_mv2) = pack16to32_mask(m1x,m1y); \
+            costrd = x264_rd_cost_part( h, i_lambda2, i8, m0->i_pixel ); \
+            if( costrd < bcostrd ) \
+            {\
+                bcostrd = costrd;\
+                bm0x = m0x;      \
+                bm0y = m0y;      \
+                bm1x = m1x;      \
+                bm1y = m1y;      \
+            }\
+        } \
+    } \
+    else if( cost < bcost ) \
+    {                  \
+        bcost = cost;  \
+        bm0x = m0x;    \
+        bm0y = m0y;    \
+        bm1x = m1x;    \
+        bm1y = m1y;    \
+    } \
+}
+
+#define CHECK_BIDIR(a,b,c,d) \
+    COST_BIMV_SATD(om0x+a, om0y+b, om1x+c, om1y+d)
+
+#define CHECK_BIDIR2(a,b,c,d) \
+    CHECK_BIDIR(a,b,c,d) \
+    CHECK_BIDIR(-(a),-(b),-(c),-(d))
+
+#define CHECK_BIDIR8(a,b,c,d) \
+    CHECK_BIDIR2(a,b,c,d) \
+    CHECK_BIDIR2(b,c,d,a) \
+    CHECK_BIDIR2(c,d,a,b) \
+    CHECK_BIDIR2(d,a,b,c)
+
+#pragma DATA_ALIGN(pix0, 16);
+static uint8_t pix0[9][16 * 16];
+#pragma DATA_ALIGN(pix1, 16);
+static uint8_t pix1[9][16 * 16];
+#pragma DATA_ALIGN(pix_1, 16);
+static uint8_t pix_1[16 * 16];
+/* each byte of visited represents 8 possible m1y positions, so a 4D array isn't needed */
+#pragma DATA_ALIGN(visited, 16);
+static uint8_t visited[8][8][8];
+
+static void ALWAYS_INLINE x264_me_refine_bidir( x264_t *h, x264_me_t *m0, x264_me_t *m1, int i_weight, int i8, int i_lambda2, int rd )
+{
+    static const int pixel_mv_offs[] = { 0, 4, 4*8, 0 };
+    int16_t *cache0_mv = h->mb.cache.mv[0][x264_scan8[i8*4]];
+    int16_t *cache0_mv2 = cache0_mv + pixel_mv_offs[m0->i_pixel];
+    int16_t *cache1_mv = h->mb.cache.mv[1][x264_scan8[i8*4]];
+    int16_t *cache1_mv2 = cache1_mv + pixel_mv_offs[m0->i_pixel];
+    const int i_pixel = m0->i_pixel;
+    const int bw = x264_pixel_size[i_pixel].w;
+    const int bh = x264_pixel_size[i_pixel].h;
+    const int16_t *p_cost_m0x = m0->p_cost_mv - x264_clip3( m0->mvp[0], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    const int16_t *p_cost_m0y = m0->p_cost_mv - x264_clip3( m0->mvp[1], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    const int16_t *p_cost_m1x = m1->p_cost_mv - x264_clip3( m1->mvp[0], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    const int16_t *p_cost_m1y = m1->p_cost_mv - x264_clip3( m1->mvp[1], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    uint8_t *src0[9];
+    uint8_t *src1[9];
+    int stride0[9];
+    int stride1[9];
+    int bm0x = m0->mv[0], om0x = bm0x;
+    int bm0y = m0->mv[1], om0y = bm0y;
+    int bm1x = m1->mv[0], om1x = bm1x;
+    int bm1y = m1->mv[1], om1y = bm1y;
+    int bcost = COST_MAX;
+    int pass = 0;
+    uint64_t bcostrd = COST_MAX64;
+
+    if( bm0y > h->mb.mv_max_spel[1] - 8 ||
+        bm1y > h->mb.mv_max_spel[1] - 8 )
+        return;
+
+    h->mc.memzero_aligned( visited, sizeof(visited) );
+
+    BIME_CACHE( 0, 0 );
+    CHECK_BIDIR( 0, 0, 0, 0 );
+
+    for( pass = 0; pass < 8; pass++ )
+    {
+        /* check all mv pairs that differ in at most 2 components from the current mvs. */
+        /* doesn't do chroma ME. this probably doesn't matter, as the gains
+         * from bidir ME are the same with and without chroma ME. */
+
+        BIME_CACHE2( 1, 0 );
+        BIME_CACHE2( 0, 1 );
+        BIME_CACHE2( 1, 1 );
+        BIME_CACHE2( 1,-1 );
+
+        CHECK_BIDIR8( 0, 0, 0, 1 );
+        CHECK_BIDIR8( 0, 0, 1, 1 );
+        CHECK_BIDIR2( 0, 1, 0, 1 );
+        CHECK_BIDIR2( 1, 0, 1, 0 );
+        CHECK_BIDIR8( 0, 0,-1, 1 );
+        CHECK_BIDIR2( 0,-1, 0, 1 );
+        CHECK_BIDIR2(-1, 0, 1, 0 );
+
+        if( om0x == bm0x && om0y == bm0y && om1x == bm1x && om1y == bm1y )
+            break;
+
+        om0x = bm0x;
+        om0y = bm0y;
+        om1x = bm1x;
+        om1y = bm1y;
+        BIME_CACHE( 0, 0 );
+    }
+
+    m0->mv[0] = bm0x;
+    m0->mv[1] = bm0y;
+    m1->mv[0] = bm1x;
+    m1->mv[1] = bm1y;
+}
+#else
 #define BIME_CACHE( dx, dy ) \
 { \
     int i = 4 + 3*dx + dy; \
@@ -930,6 +1239,7 @@ static void ALWAYS_INLINE x264_me_refine_bidir( x264_t *h, x264_me_t *m0, x264_m
     m1->mv[0] = bm1x;
     m1->mv[1] = bm1y;
 }
+#endif /* _TMS320C6400 */
 
 void x264_me_refine_bidir_satd( x264_t *h, x264_me_t *m0, x264_me_t *m1, int i_weight )
 {
@@ -942,6 +1252,121 @@ void x264_me_refine_bidir_rd( x264_t *h, x264_me_t *m0, x264_me_t *m1, int i_wei
 }
 
 #undef COST_MV_SATD
+#ifdef _TMS320C6400
+#define COST_MV_SATD( mx, my, dst, avoid_mvp ) \
+{ \
+    if( !avoid_mvp || !(mx == pmx && my == pmy) ) \
+    { \
+        int stride = 16; \
+        uint8_t *src = h->mc.get_ref( pix_2, &stride, m->p_fref, m->i_stride[0], mx, my, bw*4, bh*4 ); \
+        dst = h->pixf.mbcmp_unaligned[i_pixel]( m->p_fenc[0], FENC_STRIDE, src, stride ) \
+            + p_cost_mvx[mx] + p_cost_mvy[my]; \
+        COPY1_IF_LT( bsatd, dst ); \
+    } \
+    else \
+        dst = COST_MAX; \
+}
+
+#define COST_MV_RD( mx, my, satd, do_dir, mdir ) \
+{ \
+    if( satd <= bsatd * SATD_THRESH ) \
+    { \
+        uint64_t cost; \
+        _mem4(cache_mv) = _mem4(cache_mv2) = pack16to32_mask(mx,my); \
+        cost = x264_rd_cost_part( h, i_lambda2, i4, m->i_pixel ); \
+        COPY4_IF_LT( bcost, cost, bmx, mx, bmy, my, dir, do_dir?mdir:dir ); \
+    } \
+}
+
+#pragma DATA_ALIGN(pix_2, 16);
+static uint8_t pix_2[16 * 16];
+
+void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int i_list )
+{
+    // don't have to fill the whole mv cache rectangle
+    static const int pixel_mv_offs[] = { 0, 4, 4*8, 0, 2, 2*8, 0 };
+    int16_t *cache_mv = h->mb.cache.mv[i_list][x264_scan8[i4]];
+    int16_t *cache_mv2 = cache_mv + pixel_mv_offs[m->i_pixel];
+    const int16_t *p_cost_mvx, *p_cost_mvy;
+    const int bw = x264_pixel_size[m->i_pixel].w>>2;
+    const int bh = x264_pixel_size[m->i_pixel].h>>2;
+    const int i_pixel = m->i_pixel;
+    uint64_t bcost = m->i_pixel == PIXEL_16x16 ? m->cost : COST_MAX64;
+    int bmx = m->mv[0];
+    int bmy = m->mv[1];
+    int omx = bmx;
+    int omy = bmy;
+    int pmx, pmy, i, j;
+    unsigned bsatd;
+    int satd = 0;
+    int dir = -2;
+    int satds[8];
+
+    if( m->i_pixel != PIXEL_16x16 && i4 != 0 )
+        x264_mb_predict_mv( h, i_list, i4, bw, m->mvp );
+    pmx = m->mvp[0];
+    pmy = m->mvp[1];
+    p_cost_mvx = m->p_cost_mv - pmx;
+    p_cost_mvy = m->p_cost_mv - pmy;
+    COST_MV_SATD( bmx, bmy, bsatd, 0 );
+    COST_MV_RD( bmx, bmy, 0, 0, 0 );
+
+    /* check the predicted mv */
+    if( (bmx != pmx || bmy != pmy)
+        && pmx >= h->mb.mv_min_spel[0] && pmx <= h->mb.mv_max_spel[0]
+        && pmy >= h->mb.mv_min_spel[1] && pmy <= h->mb.mv_max_spel[1] )
+    {
+        COST_MV_SATD( pmx, pmy, satd, 0 );
+        COST_MV_RD( pmx, pmy, satd, 0,0 );
+        /* The hex motion search is guaranteed to not repeat the center candidate,
+         * so if pmv is chosen, set the "MV to avoid checking" to bmv instead. */
+        if( bmx == pmx && bmy == pmy )
+        {
+            pmx = m->mv[0];
+            pmy = m->mv[1];
+        }
+    }
+
+    /* subpel hex search, same pattern as ME HEX. */
+    dir = -2;
+    omx = bmx;
+    omy = bmy;
+    for( j=0; j<6; j++ ) COST_MV_SATD( omx + hex2[j+1][0], omy + hex2[j+1][1], satds[j], 1 );
+    for( j=0; j<6; j++ ) COST_MV_RD  ( omx + hex2[j+1][0], omy + hex2[j+1][1], satds[j], 1,j );
+
+    if( dir != -2 )
+    {
+        /* half hexagon, not overlapping the previous iteration */
+        for( i = 1; i < 10; i++ )
+        {
+            const int odir = mod6m1[dir+1];
+            if( bmy > h->mb.mv_max_spel[1] - 2 ||
+                bmy < h->mb.mv_min_spel[1] - 2 )
+                break;
+            dir = -2;
+            omx = bmx;
+            omy = bmy;
+            for( j=0; j<3; j++ ) COST_MV_SATD( omx + hex2[odir+j][0], omy + hex2[odir+j][1], satds[j], 1 );
+            for( j=0; j<3; j++ ) COST_MV_RD  ( omx + hex2[odir+j][0], omy + hex2[odir+j][1], satds[j], 1, odir-1+j );
+            if( dir == -2 )
+                break;
+        }
+    }
+
+    /* square refine, same as pattern as ME HEX. */
+    omx = bmx;
+    omy = bmy;
+    for( i=0; i<8; i++ ) COST_MV_SATD( omx + square1[i][0], omy  + square1[i][1], satds[i], 1 );
+    for( i=0; i<8; i++ ) COST_MV_RD  ( omx + square1[i][0], omy  + square1[i][1], satds[i], 0,0 );
+
+    bmy = x264_clip3( bmy, h->mb.mv_min_spel[1],  h->mb.mv_max_spel[1] );
+    m->cost = bcost;
+    m->mv[0] = bmx;
+    m->mv[1] = bmy;
+    x264_macroblock_cache_mv ( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx, bmy) );
+    x264_macroblock_cache_mvd( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx - m->mvp[0], bmy - m->mvp[1]) );
+}
+#else
 #define COST_MV_SATD( mx, my, dst, avoid_mvp ) \
 { \
     if( !avoid_mvp || !(mx == pmx && my == pmy) ) \
@@ -1054,3 +1479,5 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
     x264_macroblock_cache_mv ( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx, bmy) );
     x264_macroblock_cache_mvd( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx - m->mvp[0], bmy - m->mvp[1]) );
 }
+#endif /* _TMS320C6400 */
+

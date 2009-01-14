@@ -76,6 +76,12 @@
 #include "cabac.h"
 #include "quant.h"
 
+#ifndef strdup
+char *strdup(const char *s);
+int strcasecmp(const char *s1, const char *s2);
+int strncasecmp(const char *s1, const char *s2, size_t n);
+#endif
+
 /****************************************************************************
  * Generals functions
  ****************************************************************************/
@@ -305,8 +311,13 @@ struct x264_t
 
     const uint8_t   *chroma_qp_table; /* includes both the nonlinear luma->chroma mapping and chroma_qp_offset */
 
+#ifdef _TMS320C6400
+    uint32_t nr_residual_sum[2][64];
+    uint16_t nr_offset[2][64];
+#else
     DECLARE_ALIGNED_16( uint32_t nr_residual_sum[2][64] );
     DECLARE_ALIGNED_16( uint16_t nr_offset[2][64] );
+#endif
     uint32_t        nr_count[2];
 
     /* Slice header */
@@ -359,11 +370,20 @@ struct x264_t
     /* Current MB DCT coeffs */
     struct
     {
+#ifdef _TMS320C6400
+        uint32_t dummy[3];  /* hack to satisfy alignment */
+        int16_t luma16x16_dc[16];
+        int16_t chroma_dc[2][4];
+        // FIXME share memory?
+        int16_t luma8x8[4][64];
+        int16_t luma4x4[16+8][16];
+#else
         DECLARE_ALIGNED_16( int16_t luma16x16_dc[16] );
         DECLARE_ALIGNED_16( int16_t chroma_dc[2][4] );
         // FIXME share memory?
         DECLARE_ALIGNED_16( int16_t luma8x8[4][64] );
         DECLARE_ALIGNED_16( int16_t luma4x4[16+8][16] );
+#endif /* _TMS320C6400 */
     } dct;
 
     /* MB table and cache for current frame/mb */
@@ -463,6 +483,21 @@ struct x264_t
             /* space for p_fenc and p_fdec */
 #define FENC_STRIDE 16
 #define FDEC_STRIDE 32
+#ifdef _TMS320C6400
+            uint32_t dummy[2]; /* alignment */
+            uint8_t fenc_buf[24*FENC_STRIDE];
+            uint8_t fdec_buf[27*FDEC_STRIDE];
+
+            /* i4x4 and i8x8 backup data, for skipping the encode stage when possible */
+            uint8_t i4x4_fdec_buf[16*16];
+            uint8_t i8x8_fdec_buf[16*16];
+            int16_t i8x8_dct_buf[3][64];
+            int16_t i4x4_dct_buf[15][16];
+
+            /* Psy trellis DCT data */
+            int16_t fenc_dct8[4][64];
+            int16_t fenc_dct4[16][16];
+#else
             DECLARE_ALIGNED_16( uint8_t fenc_buf[24*FENC_STRIDE] );
             DECLARE_ALIGNED_16( uint8_t fdec_buf[27*FDEC_STRIDE] );
 
@@ -475,6 +510,7 @@ struct x264_t
             /* Psy trellis DCT data */
             DECLARE_ALIGNED_16( int16_t fenc_dct8[4][64] );
             DECLARE_ALIGNED_16( int16_t fenc_dct4[16][16] );
+#endif /* _TMS320C6400 */
 
             /* Psy RD SATD scores */
             int fenc_satd[4][4];
@@ -508,6 +544,20 @@ struct x264_t
             /* i_non_zero_count if available else 0x80 */
             uint8_t non_zero_count[X264_SCAN8_SIZE];
 
+#ifdef _TMS320C6400
+            /* -1 if unused, -2 if unavailable */
+            int8_t ref[2][X264_SCAN8_SIZE];
+
+            /* 0 if not available */
+            int16_t mv[2][X264_SCAN8_SIZE][2];
+            int16_t mvd[2][X264_SCAN8_SIZE][2];
+
+            /* 1 if SKIP or DIRECT. set only for B-frames + CABAC */
+            int8_t skip[X264_SCAN8_SIZE];
+            int16_t direct_mv[2][X264_SCAN8_SIZE][2];
+            int8_t  direct_ref[2][X264_SCAN8_SIZE];
+            int16_t pskip_mv[2];
+#else
             /* -1 if unused, -2 if unavailable */
             DECLARE_ALIGNED_4( int8_t ref[2][X264_SCAN8_SIZE] );
 
@@ -521,6 +571,7 @@ struct x264_t
             DECLARE_ALIGNED_16( int16_t direct_mv[2][X264_SCAN8_SIZE][2] );
             DECLARE_ALIGNED_4( int8_t  direct_ref[2][X264_SCAN8_SIZE] );
             DECLARE_ALIGNED_4( int16_t pskip_mv[2] );
+#endif /* _TMS320C6400 */
 
             /* number of neighbors (top and left) that used 8x8 dct */
             int     i_neighbour_transform_size;
@@ -622,6 +673,9 @@ struct x264_t
     struct visualize_t *visualize;
 #endif
 };
+#ifdef _TMS320C6400
+#pragma STRUCT_ALIGN(x264_t, 16);
+#endif
 
 // included at the end because it needs x264_t
 #include "macroblock.h"

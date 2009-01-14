@@ -1,7 +1,9 @@
 /*****************************************************************************
- * mdate.c: h264 encoder
+ * pixel.h: h264 encoder library
  *****************************************************************************
- * Copyright (C) 2003 Laurent Aimar <fenrir@via.ecp.fr>
+ * Copyright (C) 2003-2008 x264 project
+ *
+ * Author: Yufei Yuan <yyuan@gmx.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,36 +20,25 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifdef _TMS320C6400
-#include <stdint.h>
+#ifndef X264_C64_PIXEL_H
+#define X264_C64_PIXEL_H
 
-int64_t x264_mdate( void )
-{
-    return 0;
-}
-#else
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
-#include <sys/time.h>
-#else
-#include <sys/types.h>
-#include <sys/timeb.h>
-#endif
-#include <time.h>
+#define DECL_PIXELS( ret, name, suffix, args ) \
+    ret x264_pixel_##name##_16x16_##suffix args;\
+    ret x264_pixel_##name##_16x8_##suffix args;\
+    ret x264_pixel_##name##_8x16_##suffix args;\
+    ret x264_pixel_##name##_8x8_##suffix args;\
+    ret x264_pixel_##name##_8x4_##suffix args;\
+    ret x264_pixel_##name##_4x8_##suffix args;\
+    ret x264_pixel_##name##_4x4_##suffix args;\
 
-#include "common.h"
-#include "osdep.h"
+#define DECL_X1(name, suffix) \
+    DECL_PIXELS(int, name, suffix, (uint8_t *, int, uint8_t *, int))
 
-int64_t x264_mdate( void )
-{
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
-    struct timeval tv_date;
+DECL_X1(sad, c64)
 
-    gettimeofday( &tv_date, NULL );
-    return( (int64_t) tv_date.tv_sec * 1000000 + (int64_t) tv_date.tv_usec );
-#else
-    struct _timeb tb;
-    _ftime(&tb);
-    return ((int64_t)tb.time * (1000) + (int64_t)tb.millitm) * (1000);
-#endif
-}
-#endif /* _TMS320C6400 */
+#undef DECL_PIXELS
+#undef DECL_X1
+
+#endif /* X264_C64_PIXEL_H */
+

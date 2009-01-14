@@ -74,10 +74,20 @@ int x264_cqm_init( x264_t *h )
     int quant4_mf[4][6][4][4];
     int quant8_mf[2][6][8][8];
     int q, i, j, i_list;
+#ifndef _TMS320C6400
     int deadzone[4] = { 32 - h->param.analyse.i_luma_deadzone[1],
                         32 - h->param.analyse.i_luma_deadzone[0],
                         32 - 11, 32 - 21 };
     int max_qp_err = -1;
+#else
+    int deadzone[4];
+    int max_qp_err = -1;
+
+    deadzone[0] = 32 - h->param.analyse.i_luma_deadzone[1];
+    deadzone[1] = 32 - h->param.analyse.i_luma_deadzone[0];
+    deadzone[2] = 32 - 11;
+    deadzone[3] = 32 - 21;
+#endif
 
     for( i = 0; i < 6; i++ )
     {

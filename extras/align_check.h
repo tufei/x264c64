@@ -1,7 +1,10 @@
 /*****************************************************************************
- * mdate.c: h264 encoder
+ * align_check.h: h264 data alignment checking facility for TI C6x compiler
  *****************************************************************************
- * Copyright (C) 2003 Laurent Aimar <fenrir@via.ecp.fr>
+ * Copyright (C) 2003-2008 x264 project
+ *
+ * Authors: Laurent Aimar <fenrir@via.ecp.fr>
+ *          Loren Merritt <lorenm@u.washington.edu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,36 +21,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifdef _TMS320C6400
-#include <stdint.h>
+#ifndef X264_ALIGN_CHECK_H
+#define X264_ALIGN_CHECK_H
 
-int64_t x264_mdate( void )
-{
-    return 0;
-}
-#else
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
-#include <sys/time.h>
-#else
-#include <sys/types.h>
-#include <sys/timeb.h>
-#endif
-#include <time.h>
+/* n has to be a power of 2 */
+#define offsetofof(_type, _ident1, _ident2) ((size_t)__intaddr__(&(((_type *)0)->_ident1._ident2)))
+#define offsetofofof(_type, _ident1, _ident2, _ident3) ((size_t)__intaddr__(&(((_type *)0)->_ident1._ident2._ident3)))
+#define X264_ALIGN_CHECK(s, m, n) ((offsetof(s, m) & (n - 1)) == 0)
+#define X264_ALIGN_CHECK_UNNAMED(s, m, mm, n) ((offsetofof(s, m, mm) & (n - 1)) == 0)
+#define X264_ALIGN_CHECK_UNNAMED1(s, m, mm, mmm, n) ((offsetofofof(s, m, mm, mmm) & (n - 1)) == 0)
 
-#include "common.h"
-#include "osdep.h"
+void x264_init_align_check(void);
 
-int64_t x264_mdate( void )
-{
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
-    struct timeval tv_date;
+#endif /* X264_ALIGN_CHECK_H */
 
-    gettimeofday( &tv_date, NULL );
-    return( (int64_t) tv_date.tv_sec * 1000000 + (int64_t) tv_date.tv_usec );
-#else
-    struct _timeb tb;
-    _ftime(&tb);
-    return ((int64_t)tb.time * (1000) + (int64_t)tb.millitm) * (1000);
-#endif
-}
-#endif /* _TMS320C6400 */

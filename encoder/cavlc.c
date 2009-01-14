@@ -22,7 +22,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#else
 #include "common/common.h"
+#endif
 #include "macroblock.h"
 
 #ifndef RDO_SKIP_BS
@@ -232,9 +236,15 @@ static void cavlc_qp_delta( x264_t *h, bs_t *s )
     bs_write_se( s, i_dqp );
 }
 
+#ifdef _TMS320C6400
+#pragma DATA_ALIGN(mvp, 4);
+static int16_t mvp[2];
+#endif
 static void cavlc_mb_mvd( x264_t *h, bs_t *s, int i_list, int idx, int width )
 {
+#ifndef _TMS320C6400
     DECLARE_ALIGNED_4( int16_t mvp[2] );
+#endif
     x264_mb_predict_mv( h, i_list, idx, width, mvp );
     bs_write_se( s, h->mb.cache.mv[i_list][x264_scan8[idx]][0] - mvp[0] );
     bs_write_se( s, h->mb.cache.mv[i_list][x264_scan8[idx]][1] - mvp[1] );
@@ -392,7 +402,9 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
     }
     else if( i_mb_type == P_L0 )
     {
+#ifndef _TMS320C6400
         DECLARE_ALIGNED_4( int16_t mvp[2] );
+#endif
 
         if( h->mb.i_partition == D_16x16 )
         {
@@ -500,7 +512,9 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
         /* All B mode */
         /* Motion Vector */
         int i_list;
+#ifndef _TMS320C6400
         DECLARE_ALIGNED_4( int16_t mvp[2] );
+#endif
         const uint8_t (*b_list)[2] = x264_mb_type_list_table[i_mb_type];
 
         bs_write_ue( s, mb_type_b_to_golomb[ h->mb.i_partition - D_16x8 ][ i_mb_type - B_L0_L0 ] );

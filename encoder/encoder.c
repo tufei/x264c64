@@ -24,8 +24,13 @@
 
 #include <math.h>
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#include "../common/cpu.h"
+#else
 #include "common/common.h"
 #include "common/cpu.h"
+#endif
 
 #include "set.h"
 #include "analyse.h"
@@ -1789,11 +1794,18 @@ static void x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
     psz_message[0] = '\0';
     if( h->param.analyse.b_psnr )
     {
+#ifndef _TMS320C6400
         int64_t ssd[3] = {
             h->stat.frame.i_ssd[0],
             h->stat.frame.i_ssd[1],
             h->stat.frame.i_ssd[2],
         };
+#else
+        int64_t ssd[3];
+        ssd[0] = h->stat.frame.i_ssd[0];
+        ssd[1] = h->stat.frame.i_ssd[1];
+        ssd[2] = h->stat.frame.i_ssd[2];
+#endif
 
         h->stat.i_ssd_global[h->sh.i_type] += ssd[0] + ssd[1] + ssd[2];
         h->stat.f_psnr_average[h->sh.i_type] += x264_psnr( ssd[0] + ssd[1] + ssd[2], 3 * h->param.i_width * h->param.i_height / 2 );
@@ -1881,6 +1893,9 @@ void    x264_encoder_close  ( x264_t *h )
                    || h->stat.i_mb_count[SLICE_TYPE_P][I_PCM]
                    || h->stat.i_mb_count[SLICE_TYPE_B][I_PCM];
 
+#ifdef _TMS320C6400
+    memset(i_mb_count_size, 0, 2 * 7 * sizeof(int64_t));
+#endif
     for( i=0; i<h->param.i_threads; i++ )
     {
         // don't strictly have to wait for the other threads, but it's simpler than canceling them
@@ -1974,7 +1989,7 @@ void    x264_encoder_close  ( x264_t *h )
         double i_count = h->stat.i_slice_count[SLICE_TYPE_B] * h->mb.i_mb_count / 100.0;
         double i_mb_list_count;
         int64_t *i_mb_size = i_mb_count_size[SLICE_TYPE_B];
-        int64_t list_count[3] = {0}; /* 0 == L0, 1 == L1, 2 == BI */
+        int64_t list_count[3] = {0, 0, 0}; /* 0 == L0, 1 == L1, 2 == BI */ /* YFY --12/30/2008 */
         x264_print_intra( i_mb_count, i_count, b_print_pcm, buf );
         for( i = 0; i < X264_PARTTYPE_MAX; i++ )
             for( j = 0; j < 2; j++ )

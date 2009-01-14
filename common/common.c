@@ -25,13 +25,72 @@
 #include <ctype.h>
 
 #ifdef HAVE_MALLOC_H
+#ifdef _TMS320C6400
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif /* _TMS320C6400 */
 #endif
 
 #include "common.h"
 #include "cpu.h"
 
 static void x264_log_default( void *, int, const char *, va_list );
+
+#ifdef _TMS320C6400
+char *strdup(const char *s)
+{
+    char *d;
+
+    if(s == NULL) 
+    {
+        return NULL;
+    }
+    d = (char *)malloc((1 + strlen(s)) * sizeof(char));
+
+    return strcpy(d, s);
+}
+
+#define LOCAL_STRING_MAX_LEN    256
+
+int strcasecmp(const char *s1, const char *s2)
+{
+    int i, j;
+    char ls[2][LOCAL_STRING_MAX_LEN];
+
+    /* this is not right, but so far just want to do it quick and dirty */
+    memset(ls, 0, sizeof(ls));
+    strncpy(ls[0], s1, LOCAL_STRING_MAX_LEN - 1);
+    strncpy(ls[1], s2, LOCAL_STRING_MAX_LEN - 1);
+    for(i = 0; i < 2; ++i) 
+    {
+        for(j = 0; j < strlen(ls[i]); ++j) 
+        {
+            ls[i][j] = tolower(ls[i][j]);
+        }
+    }
+    return strcmp(ls[0], ls[1]);
+}
+
+int strncasecmp(const char *s1, const char *s2, size_t n)
+{
+    int i, j;
+    char ls[2][LOCAL_STRING_MAX_LEN];
+
+    /* this is not right, but so far just want to do it quick and dirty */
+    memset(ls, 0, sizeof(ls));
+    strncpy(ls[0], s1, LOCAL_STRING_MAX_LEN - 1);
+    strncpy(ls[1], s2, LOCAL_STRING_MAX_LEN - 1);
+    for(i = 0; i < 2; ++i) 
+    {
+        for(j = 0; j < strlen(ls[i]); ++j) 
+        {
+            ls[i][j] = tolower(ls[i][j]);
+        }
+    }
+    return strncmp(ls[0], ls[1], n);
+}
+#endif
 
 /****************************************************************************
  * x264_param_default:

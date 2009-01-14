@@ -40,13 +40,23 @@ typedef struct
     uint16_t *integral;
     int      i_stride[2];
 
+#ifdef _TMS320C6400
+    int16_t mvp[2];
+#else
     DECLARE_ALIGNED_4( int16_t mvp[2] );
+#endif
 
     /* output */
     int cost_mv;        /* lambda * nbits for the chosen mv */
     int cost;           /* satd + lambda * nbits */
+#ifdef _TMS320C6400
+    int16_t mv[2];
+} x264_me_t;
+#pragma STRUCT_ALIGN(x264_me_t, 16);
+#else
     DECLARE_ALIGNED_4( int16_t mv[2] );
 } DECLARE_ALIGNED_16( x264_me_t );
+#endif
 
 void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, int *p_fullpel_thresh );
 static inline void x264_me_search( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc )

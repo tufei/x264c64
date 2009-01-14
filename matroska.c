@@ -106,7 +106,16 @@ static int	  mk_appendContextData(mk_Context *c, const void *data, unsigned size
 }
 
 static int	  mk_writeID(mk_Context *c, unsigned id) {
+#ifndef _TMS320C6400
   unsigned char	  c_id[4] = { id >> 24, id >> 16, id >> 8, id };
+#else
+  unsigned char	  c_id[4];
+
+  c_id[0] = id >> 24;
+  c_id[1] = id >> 16;
+  c_id[2] = id >> 8;
+  c_id[3] = id;
+#endif
 
   if (c_id[0])
     return mk_appendContextData(c, c_id, 4);
@@ -118,7 +127,17 @@ static int	  mk_writeID(mk_Context *c, unsigned id) {
 }
 
 static int	  mk_writeSize(mk_Context *c, unsigned size) {
+#ifndef _TMS320C6400
   unsigned char	  c_size[5] = { 0x08, size >> 24, size >> 16, size >> 8, size };
+#else
+  unsigned char	  c_size[5];
+
+  c_size[0] = 0x08;
+  c_size[1] = size >> 24;
+  c_size[2] = size >> 16;
+  c_size[3] = size >> 8;
+  c_size[4] = size;
+#endif
 
   if (size < 0x7f) {
     c_size[4] |= 0x80;
@@ -223,8 +242,22 @@ static int	  mk_writeBin(mk_Context *c, unsigned id, const void *data, unsigned 
 }
 
 static int	  mk_writeUInt(mk_Context *c, unsigned id, int64_t ui) {
+#ifndef _TMS320C6400
   unsigned char	  c_ui[8] = { ui >> 56, ui >> 48, ui >> 40, ui >> 32, ui >> 24, ui >> 16, ui >> 8, ui };
   unsigned	  i = 0;
+#else
+  unsigned char	  c_ui[8];
+  unsigned	  i = 0;
+
+  c_ui[0] = ui >> 56;
+  c_ui[1] = ui >> 48;
+  c_ui[2] = ui >> 40;
+  c_ui[3] = ui >> 32;
+  c_ui[4] = ui >> 24;
+  c_ui[5] = ui >> 16;
+  c_ui[6] = ui >> 8;
+  c_ui[7] = ui;
+#endif
 
   CHECK(mk_writeID(c, id));
   while (i < 7 && c_ui[i] == 0)
@@ -235,8 +268,22 @@ static int	  mk_writeUInt(mk_Context *c, unsigned id, int64_t ui) {
 }
 
 static int  	  mk_writeSInt(mk_Context *c, unsigned id, int64_t si) {
+#ifndef _TMS320C6400
   unsigned char	  c_si[8] = { si >> 56, si >> 48, si >> 40, si >> 32, si >> 24, si >> 16, si >> 8, si };
   unsigned	  i = 0;
+#else
+  unsigned char	  c_si[8];
+  unsigned	  i = 0;
+
+  c_si[0] = si >> 56;
+  c_si[1] = si >> 48;
+  c_si[2] = si >> 40;
+  c_si[3] = si >> 32;
+  c_si[4] = si >> 24;
+  c_si[5] = si >> 16;
+  c_si[6] = si >> 8;
+  c_si[7] = si;
+#endif
 
   CHECK(mk_writeID(c, id));
   if (si < 0)
@@ -286,8 +333,22 @@ static unsigned	  mk_ebmlSizeSize(unsigned s) {
 }
 
 static unsigned	  mk_ebmlSIntSize(int64_t si) {
+#ifndef _TMS320C6400
   unsigned char	  c_si[8] = { si >> 56, si >> 48, si >> 40, si >> 32, si >> 24, si >> 16, si >> 8, si };
   unsigned	  i = 0;
+#else
+  unsigned char	  c_si[8];
+  unsigned	  i = 0;
+
+  c_si[0] = si >> 56;
+  c_si[1] = si >> 48;
+  c_si[2] = si >> 40;
+  c_si[3] = si >> 32;
+  c_si[4] = si >> 24;
+  c_si[5] = si >> 16;
+  c_si[6] = si >> 8;
+  c_si[7] = si;
+#endif
 
   if (si < 0)
     while (i < 7 && c_si[i] == 0xff && c_si[i+1] & 0x80)

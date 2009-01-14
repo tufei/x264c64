@@ -23,9 +23,17 @@
 
 #include <math.h>
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#else
 #include "common/common.h"
+#endif
 #ifndef _MSC_VER
+#ifdef _TMS320C6400
+#include "../config.h"
+#else
 #include "config.h"
+#endif
 #endif
 #include "set.h"
 
@@ -527,6 +535,42 @@ const x264_level_t x264_levels[] =
     { 0 }
 };
 
+#ifdef _TMS320C6400
+int x264_validate_levels( x264_t *h, int verbose )
+{
+    int ret = 0;
+    int mbs = h->sps->i_mb_width * h->sps->i_mb_height;
+    int dpb = mbs * 384 * h->sps->i_num_ref_frames;
+    int cbp_factor = h->sps->i_profile_idc==PROFILE_HIGH ? 5 : 4;
+
+    const x264_level_t *l = x264_levels;
+    while( l->level_idc != 0 && l->level_idc != h->param.i_level_idc )
+        l++;
+
+    if( l->frame_size < mbs
+        || l->frame_size*8 < h->sps->i_mb_width * h->sps->i_mb_width
+        || l->frame_size*8 < h->sps->i_mb_height * h->sps->i_mb_height )
+        ret = 1;
+    if( dpb > l->dpb )
+        ret = 1;
+#define CHECK( name, limit, val ) \
+    if( (val) > (limit) ) \
+        ret = 1;
+
+    CHECK( "VBV bitrate", (l->bitrate * cbp_factor) / 4, h->param.rc.i_vbv_max_bitrate );
+    CHECK( "VBV buffer", (l->cpb * cbp_factor) / 4, h->param.rc.i_vbv_buffer_size );
+    CHECK( "MV range", l->mv_range, h->param.analyse.i_mv_range );
+    CHECK( "interlaced", !l->frame_only, h->param.b_interlaced );
+
+    if( h->param.i_fps_den > 0 )
+        CHECK( "MB rate", l->mbps, (int64_t)mbs * h->param.i_fps_num / h->param.i_fps_den );
+    if( h->sps->b_direct8x8_inference < l->direct8x8 )
+        ret = 1;
+
+    /* TODO check the rest of the limits */
+    return ret;
+}
+#else
 #define ERROR(...)\
 {\
     if( verbose )\
@@ -571,3 +615,5 @@ int x264_validate_levels( x264_t *h, int verbose )
     /* TODO check the rest of the limits */
     return ret;
 }
+#endif /* _TMS320C6400 */
+

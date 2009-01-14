@@ -64,6 +64,13 @@
 #endif
 #endif
 
+#ifdef _TMS320C6400
+#ifndef strtok_r
+#define strtok_r(str,delim,save) strtok(str,delim)
+#endif
+#endif /* _TMS320C6400 */
+
+#ifndef _TMS320C6400
 #ifdef _MSC_VER
 #define DECLARE_ALIGNED( var, n ) __declspec(align(n)) var
 #else
@@ -72,6 +79,14 @@
 #define DECLARE_ALIGNED_16( var ) DECLARE_ALIGNED( var, 16 )
 #define DECLARE_ALIGNED_8( var )  DECLARE_ALIGNED( var, 8 )
 #define DECLARE_ALIGNED_4( var )  DECLARE_ALIGNED( var, 4 )
+#else
+#if 0
+#define DECLARE_ALIGNED( var, n ) var
+#define DECLARE_ALIGNED_16( var ) DECLARE_ALIGNED( var, 16 )
+#define DECLARE_ALIGNED_8( var )  DECLARE_ALIGNED( var, 8 )
+#define DECLARE_ALIGNED_4( var )  DECLARE_ALIGNED( var, 4 )
+#endif
+#endif /* _TMS320C6400 */
 
 #if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 0)
 #define UNUSED __attribute__((unused))
@@ -155,11 +170,25 @@ static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
     asm("bswap %0":"+r"(x));
     return x;
 }
+#elif defined(_TMS320C6400)
+static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
+{
+    return _swap4(_packlh2(x, x));
+}
+
+static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
+{
+    if( WORD_SIZE == 8 )
+        return endian_fix32(x>>(WORD_SIZE<<2)) + ((uint64_t)endian_fix32(x)<<(WORD_SIZE<<2));
+    else
+        return endian_fix32(x);
+}
 #else
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     return (x<<24) + ((x<<8)&0xff0000) + ((x>>8)&0xff00) + (x>>24);
 }
+
 static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
 {
     if( WORD_SIZE == 8 )
@@ -171,6 +200,11 @@ static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
 
 #ifdef __GNUC__
 #define x264_clz(x) __builtin_clz(x)
+#elif defined(_TMS320C6400)
+static int ALWAYS_INLINE x264_clz( uint32_t x )
+{
+    return _lmbd(1, x);
+}
 #else
 static int ALWAYS_INLINE x264_clz( uint32_t x )
 {
@@ -186,3 +220,4 @@ static int ALWAYS_INLINE x264_clz( uint32_t x )
 #endif
 
 #endif /* X264_OSDEP_H */
+

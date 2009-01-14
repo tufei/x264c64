@@ -30,8 +30,13 @@
 #include <limits.h>
 #include <assert.h>
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#include "../common/cpu.h"
+#else
 #include "common/common.h"
 #include "common/cpu.h"
+#endif
 #include "ratecontrol.h"
 
 typedef struct
@@ -246,7 +251,6 @@ void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame )
         }
 }
 
-
 /*****************************************************************************
 * x264_adaptive_quant:
  * adjust macroblock QP based on variance (AC energy) of the MB.
@@ -401,7 +405,11 @@ int x264_ratecontrol_new( x264_t *h )
         char *p, *stats_in, *stats_buf;
 
         /* read 1st pass stats */
+#ifdef _TMS320C6400
+        assert( (int)h->param.rc.psz_stat_in );
+#else
         assert( h->param.rc.psz_stat_in );
+#endif
         stats_buf = stats_in = x264_slurp_file( h->param.rc.psz_stat_in );
         if( !stats_buf )
         {
@@ -1164,8 +1172,13 @@ static double get_qscale(x264_t *h, ratecontrol_entry_t *rce, double rate_factor
 
     q = pow( rce->blurred_complexity, 1 - h->param.rc.f_qcompress );
 
+#ifdef _TMS320C6400
+    /* no isfinite() in TI RTS */
+    if(rce->tex_bits + rce->mv_bits == 0)
+#else
     // avoid NaN's in the rc_eq
     if(!isfinite(q) || rce->tex_bits + rce->mv_bits == 0)
+#endif
         q = rcc->last_qscale;
     else
     {

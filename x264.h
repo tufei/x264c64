@@ -29,7 +29,7 @@
 # ifdef _MSC_VER
 #  pragma message("You must include stdint.h or inttypes.h before x264.h")
 # else
-#  warning You must include stdint.h or inttypes.h before x264.h
+#  error You must include stdint.h or inttypes.h before x264.h
 # endif
 #endif
 

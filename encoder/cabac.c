@@ -22,7 +22,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#else
 #include "common/common.h"
+#endif
 #include "macroblock.h"
 
 #ifndef RDO_SKIP_BS
@@ -166,6 +170,24 @@ static void x264_cabac_mb_type( x264_t *h, x264_cabac_t *cb )
                 7, 7, 0,    /* BI L1 */
                 7, 7, 6,    /* BI BI */
             };
+#ifdef _TMS320C6400
+            /*
+             * although this array length is defined by i_mb_len[], we still initialize
+             * all elements to be on the safe side
+             */
+            static const int i_mb_bits[9*3][7] =
+            {
+                { 1,1,0,0,0,1,0 }, { 1,1,0,0,1,0,0 }, { 1,0,0,0,0,0,0 },    /* L0 L0 */
+                { 1,1,0,1,0,1,0 }, { 1,1,0,1,1,0,0 }, { 0,0,0,0,0,0,0 },    /* L0 L1 */
+                { 1,1,1,0,0,0,0 }, { 1,1,1,0,0,0,1 }, { 0,0,0,0,0,0,0 },    /* L0 BI */
+                { 1,1,0,1,1,1,0 }, { 1,1,1,1,1,0,0 }, { 0,0,0,0,0,0,0 },    /* L1 L0 */
+                { 1,1,0,0,1,1,0 }, { 1,1,0,1,0,0,0 }, { 1,0,1,0,0,0,0 },    /* L1 L1 */
+                { 1,1,1,0,0,1,0 }, { 1,1,1,0,0,1,1 }, { 0,0,0,0,0,0,0 },    /* L1 BI */
+                { 1,1,1,0,1,0,0 }, { 1,1,1,0,1,0,1 }, { 0,0,0,0,0,0,0 },    /* BI L0 */
+                { 1,1,1,0,1,1,0 }, { 1,1,1,0,1,1,1 }, { 0,0,0,0,0,0,0 },    /* BI L1 */
+                { 1,1,1,1,0,0,0 }, { 1,1,1,1,0,0,1 }, { 1,1,0,0,0,0,0 },    /* BI BI */
+            };
+#else
             static const int i_mb_bits[9*3][7] =
             {
                 { 1,1,0,0,0,1   }, { 1,1,0,0,1,0,  }, { 1,0,0 },       /* L0 L0 */
@@ -178,6 +200,7 @@ static void x264_cabac_mb_type( x264_t *h, x264_cabac_t *cb )
                 { 1,1,1,0,1,1,0 }, { 1,1,1,0,1,1,1 }, {0},             /* BI L1 */
                 { 1,1,1,1,0,0,0 }, { 1,1,1,1,0,0,1 }, { 1,1,0,0,0,0 }, /* BI BI */
             };
+#endif /* _TMS320C6400 */
 
             const int idx = (i_mb_type - B_L0_L0) * 3 + (h->mb.i_partition - D_16x8);
             int i;
@@ -452,9 +475,15 @@ static inline void x264_cabac_mb_mvd_cpn( x264_t *h, x264_cabac_t *cb, int i_lis
     }
 }
 
+#ifdef _TMS320C6400
+#pragma DATA_ALIGN(mvp, 4);
+static int16_t mvp[2];
+#endif
 static inline void x264_cabac_mb_mvd( x264_t *h, x264_cabac_t *cb, int i_list, int idx, int width, int height )
 {
+#ifndef _TMS320C6400
     DECLARE_ALIGNED_4( int16_t mvp[2] );
+#endif
     int mdx, mdy;
 
     /* Calculate mvd */
@@ -704,7 +733,13 @@ static void block_residual_write_cabac( x264_t *h, x264_cabac_t *cb, int i_ctxBl
         i_coeff--;
 
         /* write coeff_abs - 1 */
+#ifdef _TMS320C6400
+        i_prefix = 14;
+        if(i_coeff_abs_m1[i_coeff] < i_prefix)
+            i_prefix = i_coeff_abs_m1[i_coeff]; 
+#else
         i_prefix = X264_MIN( i_coeff_abs_m1[i_coeff], 14 );
+#endif
         ctx = coeff_abs_level1_ctx[node_ctx] + i_ctx_level;
 
         if( i_prefix )
@@ -1061,14 +1096,24 @@ static void x264_partition_i8x8_size_cabac( x264_t *h, x264_cabac_t *cb, int i8,
     x264_cabac_mb_intra4x4_pred_mode( cb, i_pred, i_mode );
     if( nnz )
     {
+#ifdef _TMS320C6400
+        _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4]]) = 0x0101;
+        _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0x0101;
+#else
         *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[i8*4]] = 0x0101;
         *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]] = 0x0101;
+#endif
         block_residual_write_cabac( h, cb, DCT_LUMA_8x8, 4*i8, h->dct.luma8x8[i8], 64 );
     }
     else
     {
+#ifdef _TMS320C6400
+        _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4]]) = 0;
+        _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0;
+#else
         *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[i8*4]] = 0;
         *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]] = 0;
+#endif
     }
 }
 

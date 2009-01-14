@@ -32,6 +32,9 @@
 #ifdef ARCH_UltraSparc
 #   include "sparc/pixel.h"
 #endif
+#ifdef _TMS320C6400
+#   include "c64/pixel.h"
+#endif
 
 
 /****************************************************************************
@@ -393,6 +396,16 @@ SAD_X( 16x8_vis )
 SAD_X( 8x16_vis )
 SAD_X( 8x8_vis )
 #endif
+
+#ifdef _TMS320C6400
+SAD_X( 16x16_c64 )
+SAD_X( 16x8_c64 )
+SAD_X( 8x16_c64 )
+SAD_X( 8x8_c64 )
+SAD_X( 8x4_c64 )
+SAD_X( 4x8_c64 )
+SAD_X( 4x4_c64 )
+#endif /* _TMS320C6400 */
 
 /****************************************************************************
  * pixel_satd_x4
@@ -793,6 +806,12 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
     INIT4( sad_x3, _vis );
     INIT4( sad_x4, _vis );
 #endif
+
+#ifdef _TMS320C6400
+    INIT7(sad, _c64);
+    INIT7(sad_x3, _c64);
+    INIT7(sad_x4, _c64);
+#endif /* _TMS320C6400 */
 
     pixf->ads[PIXEL_8x16] =
     pixf->ads[PIXEL_8x4] =

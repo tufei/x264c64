@@ -38,6 +38,18 @@
  * 16x16 prediction for intra luma block
  ****************************************************************************/
 
+#ifdef _TMS320C6400
+#define PREDICT_16x16_DC(v) \
+    for( i = 0; i < 16; i++ )\
+    {\
+        uint32_t *p = (uint32_t*)src;\
+        _mem4(p++) = v;\
+        _mem4(p++) = v;\
+        _mem4(p++) = v;\
+        _mem4(p++) = v;\
+        src += FDEC_STRIDE;\
+    }
+#else
 #define PREDICT_16x16_DC(v) \
     for( i = 0; i < 16; i++ )\
     {\
@@ -48,6 +60,7 @@
         *p++ = v;\
         src += FDEC_STRIDE;\
     }
+#endif /* _TMS320C6400 */
 
 static void predict_16x16_dc( uint8_t *src )
 {
@@ -63,6 +76,7 @@ static void predict_16x16_dc( uint8_t *src )
 
     PREDICT_16x16_DC(dc);
 }
+
 static void predict_16x16_dc_left( uint8_t *src )
 {
     uint32_t dc = 0;
@@ -76,6 +90,7 @@ static void predict_16x16_dc_left( uint8_t *src )
 
     PREDICT_16x16_DC(dc);
 }
+
 static void predict_16x16_dc_top( uint8_t *src )
 {
     uint32_t dc = 0;
@@ -89,11 +104,13 @@ static void predict_16x16_dc_top( uint8_t *src )
 
     PREDICT_16x16_DC(dc);
 }
+
 static void predict_16x16_dc_128( uint8_t *src )
 {
     int i;
     PREDICT_16x16_DC(0x80808080);
 }
+
 static void predict_16x16_h( uint8_t *src )
 {
     int i;
@@ -103,15 +120,43 @@ static void predict_16x16_h( uint8_t *src )
         const uint32_t v = 0x01010101 * src[-1];
         uint32_t *p = (uint32_t*)src;
 
+#ifdef _TMS320C6400
+        _mem4(p++) = v;
+        _mem4(p++) = v;
+        _mem4(p++) = v;
+        _mem4(p++) = v;
+#else
         *p++ = v;
         *p++ = v;
         *p++ = v;
         *p++ = v;
+#endif /* _TMS320C6400 */
 
         src += FDEC_STRIDE;
 
     }
 }
+
+#ifdef _TMS320C6400
+static void predict_16x16_v( uint8_t *src )
+{
+    uint32_t v0 = _mem4(&src[ 0-FDEC_STRIDE]);
+    uint32_t v1 = _mem4(&src[ 4-FDEC_STRIDE]);
+    uint32_t v2 = _mem4(&src[ 8-FDEC_STRIDE]);
+    uint32_t v3 = _mem4(&src[12-FDEC_STRIDE]);
+    int i;
+
+    for( i = 0; i < 16; i++ )
+    {
+        uint32_t *p = (uint32_t*)src;
+        _mem4(p++) = v0;
+        _mem4(p++) = v1;
+        _mem4(p++) = v2;
+        _mem4(p++) = v3;
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_16x16_v( uint8_t *src )
 {
     uint32_t v0 = *(uint32_t*)&src[ 0-FDEC_STRIDE];
@@ -130,6 +175,8 @@ static void predict_16x16_v( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
 static void predict_16x16_p( uint8_t *src )
 {
     int x, y, i;
@@ -168,7 +215,18 @@ static void predict_16x16_p( uint8_t *src )
 /****************************************************************************
  * 8x8 prediction for intra chroma block
  ****************************************************************************/
+#ifdef _TMS320C6400
+static void predict_8x8c_dc_128( uint8_t *src )
+{
+    int y;
 
+    for( y = 0; y < 8; y++ )
+    {
+        _mem8(src) = 0x8080808080808080;
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_8x8c_dc_128( uint8_t *src )
 {
     int y;
@@ -181,6 +239,35 @@ static void predict_8x8c_dc_128( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8c_dc_left( uint8_t *src )
+{
+    int y;
+    uint64_t dc0 = 0, dc1 = 0;
+
+    for( y = 0; y < 4; y++ )
+    {
+        dc0 += src[y * FDEC_STRIDE     - 1];
+        dc1 += src[(y+4) * FDEC_STRIDE - 1];
+    }
+    dc0 = (( dc0 + 2 ) >> 2) * 0x0101010101010101;
+    dc1 = (( dc1 + 2 ) >> 2) * 0x0101010101010101;
+
+    for( y = 0; y < 4; y++ )
+    {
+        _mem8(src) = dc0;
+        src += FDEC_STRIDE;
+    }
+    for( y = 0; y < 4; y++ )
+    {
+        _mem8(src) = dc1;
+        src += FDEC_STRIDE;
+    }
+
+}
+#else
 static void predict_8x8c_dc_left( uint8_t *src )
 {
     int y;
@@ -210,6 +297,33 @@ static void predict_8x8c_dc_left( uint8_t *src )
     }
 
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8c_dc_top( uint8_t *src )
+{
+    int y, x;
+    uint64_t dc0 = 0, dc1 = 0;
+
+    for( x = 0; x < 4; x++ )
+    {
+        dc0 += src[x     - FDEC_STRIDE];
+        dc1 += src[x + 4 - FDEC_STRIDE];
+    }
+    dc0 = (( dc0 + 2 ) >> 2)*0x01010101;
+    dc1 = (( dc1 + 2 ) >> 2)*0x01010101;
+
+    for( y = 0; y < 8; y++ )
+    {
+#ifdef WORDS_BIGENDIAN
+        _mem8(src) = (dc0 << 32) + dc1;
+#else
+        _mem8(src) = (dc1 << 32) + dc0;
+#endif
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_8x8c_dc_top( uint8_t *src )
 {
     int y, x;
@@ -231,6 +345,57 @@ static void predict_8x8c_dc_top( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8c_dc( uint8_t *src )
+{
+    int y, i;
+    uint32_t s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+    uint64_t dc0, dc1, dc2, dc3;
+
+    /*
+          s0 s1
+       s2
+       s3
+    */
+    for( i = 0; i < 4; i++ )
+    {
+        s0 += src[i - FDEC_STRIDE];
+        s1 += src[i + 4 - FDEC_STRIDE];
+        s2 += src[-1 + i * FDEC_STRIDE];
+        s3 += src[-1 + (i+4)*FDEC_STRIDE];
+    }
+    /*
+       dc0 dc1
+       dc2 dc3
+     */
+    dc0 = (( s0 + s2 + 4 ) >> 3) * 0x01010101;
+    dc1 = (( s1 + 2 ) >> 2) * 0x01010101;
+    dc2 = (( s3 + 2 ) >> 2) * 0x01010101;
+    dc3 = (( s1 + s3 + 4 ) >> 3) * 0x01010101;
+
+    for( y = 0; y < 4; y++ )
+    {
+#ifdef WORDS_BIGENDIAN
+        _mem8(src) = (dc0 << 32) + dc1;
+#else
+        _mem8(src) = (dc1 << 32) + dc0;
+#endif
+        src += FDEC_STRIDE;
+    }
+
+    for( y = 0; y < 4; y++ )
+    {
+#ifdef WORDS_BIGENDIAN
+        _mem8(src) = (dc2 << 32) + dc3;
+#else
+        _mem8(src) = (dc3 << 32) + dc2;
+#endif
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_8x8c_dc( uint8_t *src )
 {
     int y;
@@ -275,6 +440,21 @@ static void predict_8x8c_dc( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8c_h( uint8_t *src )
+{
+    int i;
+
+    for( i = 0; i < 8; i++ )
+    {
+        uint64_t v = 0x0101010101010101 * src[-1];
+        _mem8(src) = v;
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_8x8c_h( uint8_t *src )
 {
     int i;
@@ -288,6 +468,21 @@ static void predict_8x8c_h( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8c_v( uint8_t *src )
+{
+    uint64_t v = _mem8(&src[0 - FDEC_STRIDE]);
+    int i;
+
+    for( i = 0; i < 8; i++ )
+    {
+        _mem8(src) = v;
+        src += FDEC_STRIDE;
+    }
+}
+#else
 static void predict_8x8c_v( uint8_t *src )
 {
     uint32_t v0 = *(uint32_t*)&src[0-FDEC_STRIDE];
@@ -302,6 +497,8 @@ static void predict_8x8c_v( uint8_t *src )
         src += FDEC_STRIDE;
     }
 }
+#endif /* _TMS320C6400 */
+
 static void predict_8x8c_p( uint8_t *src )
 {
     int i;
@@ -340,7 +537,11 @@ static void predict_8x8c_p( uint8_t *src )
  ****************************************************************************/
 
 #define SRC(x,y) src[(x)+(y)*FDEC_STRIDE]
+#ifdef _TMS320C6400
+#define SRC32(x,y) _mem4(&SRC(x,y))
+#else
 #define SRC32(x,y) *(uint32_t*)&SRC(x,y)
+#endif
 
 #define PREDICT_4x4_DC(v)\
     SRC32(0,0) = SRC32(0,1) = SRC32(0,2) = SRC32(0,3) = v;
@@ -532,7 +733,11 @@ void x264_predict_8x8_filter( uint8_t *src, uint8_t edge[33], int i_neighbor, in
             }
             else
             {
+#ifdef _TMS320C6400
+                _mem8(edge + 24) = SRC(7,-1) * 0x0101010101010101ULL;
+#else
                 *(uint64_t*)(edge+24) = SRC(7,-1) * 0x0101010101010101ULL;
+#endif
                 edge[32] = SRC(7,-1);
             }
         }
@@ -555,6 +760,47 @@ void x264_predict_8x8_filter( uint8_t *src, uint8_t edge[33], int i_neighbor, in
 #define PREDICT_8x8_LOAD_TOPRIGHT \
     PT(8) PT(9) PT(10) PT(11) PT(12) PT(13) PT(14) PT(15)
 
+#ifdef _TMS320C6400
+#define PREDICT_8x8_DC(v) \
+    int y; \
+    for( y = 0; y < 8; y++ ) { \
+        _mem8(src) = v; \
+        src += FDEC_STRIDE; \
+    }
+
+/* SIMD is much faster than C for all of these except HU and HD. */
+static void predict_8x8_dc_128( uint8_t *src, uint8_t edge[33] )
+{
+    PREDICT_8x8_DC(0x8080808080808080ULL);
+}
+static void predict_8x8_dc_left( uint8_t *src, uint8_t edge[33] )
+{
+    PREDICT_8x8_LOAD_LEFT
+    const uint64_t dc = ((l0+l1+l2+l3+l4+l5+l6+l7+4) >> 3) * 0x0101010101010101ULL;
+    PREDICT_8x8_DC(dc);
+}
+static void predict_8x8_dc_top( uint8_t *src, uint8_t edge[33] )
+{
+    PREDICT_8x8_LOAD_TOP
+    const uint64_t dc = ((t0+t1+t2+t3+t4+t5+t6+t7+4) >> 3) * 0x0101010101010101ULL;
+    PREDICT_8x8_DC(dc);
+}
+static void predict_8x8_dc( uint8_t *src, uint8_t edge[33] )
+{
+    PREDICT_8x8_LOAD_LEFT
+    PREDICT_8x8_LOAD_TOP
+    const uint64_t dc = ((l0+l1+l2+l3+l4+l5+l6+l7
+                         +t0+t1+t2+t3+t4+t5+t6+t7+8) >> 4) * 0x0101010101010101ULL;
+    PREDICT_8x8_DC(dc);
+}
+static void predict_8x8_h( uint8_t *src, uint8_t edge[33] )
+{
+    PREDICT_8x8_LOAD_LEFT
+#define ROW(y) _mem8(src+y*FDEC_STRIDE) = l##y * 0x0101010101010101ULL
+    ROW(0); ROW(1); ROW(2); ROW(3); ROW(4); ROW(5); ROW(6); ROW(7);
+#undef ROW
+}
+#else /* _TMS320C6400 */
 #define PREDICT_8x8_DC(v) \
     int y; \
     for( y = 0; y < 8; y++ ) { \
@@ -596,6 +842,16 @@ static void predict_8x8_h( uint8_t *src, uint8_t edge[33] )
     ROW(0); ROW(1); ROW(2); ROW(3); ROW(4); ROW(5); ROW(6); ROW(7);
 #undef ROW
 }
+#endif /* _TMS320C6400 */
+
+#ifdef _TMS320C6400
+static void predict_8x8_v( uint8_t *src, uint8_t edge[33] )
+{
+    int y;
+    for( y = 0; y < 8; y++ )
+        _mem8(src + y * FDEC_STRIDE) = _mem8_const(edge + 16);
+}
+#else
 static void predict_8x8_v( uint8_t *src, uint8_t edge[33] )
 {
     const uint64_t top = *(uint64_t*)(edge+16);
@@ -603,6 +859,8 @@ static void predict_8x8_v( uint8_t *src, uint8_t edge[33] )
     for( y = 0; y < 8; y++ )
         *(uint64_t*)(src+y*FDEC_STRIDE) = top;
 }
+#endif /* _TMS320C6400 */
+
 static void predict_8x8_ddl( uint8_t *src, uint8_t edge[33] )
 {
     PREDICT_8x8_LOAD_TOP

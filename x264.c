@@ -24,9 +24,17 @@
 #include <stdlib.h>
 #include <math.h>
 
+#ifndef _TMS320C6400
 #include <signal.h>
 #define _GNU_SOURCE
 #include <getopt.h>
+#else
+#include "extras/getopt.h"
+#include "extras/align_check.h"
+#include <stdint.h>
+#include <csl.h>
+#include <csl_cache.h>
+#endif
 
 #include "common/common.h"
 #include "common/cpu.h"
@@ -46,6 +54,7 @@
 uint8_t *mux_buffer = NULL;
 int mux_buffer_size = 0;
 
+#ifndef _TMS320C6400
 /* Ctrl-C handler */
 static int     b_ctrl_c = 0;
 static int     b_exit_on_ctrl_c = 0;
@@ -55,6 +64,7 @@ static void    SigIntHandler( int a )
         exit(0);
     b_ctrl_c = 1;
 }
+#endif
 
 typedef struct {
     int b_progress;
@@ -82,6 +92,41 @@ static int  Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt );
 static int  Encode( x264_param_t *param, cli_opt_t *opt );
 
 
+#ifdef _TMS320C6400
+extern far char __c_args__;
+const char *main_arguments[] = 
+{
+    "x264.out",
+    "--bitrate", "400",
+    "-w",
+	"-b", "2",
+    "-o", "football.264",
+    "C:\\CCStudio_v3.1\\football_sif.y4m"
+};
+
+/* this is a hack function to initialize the arguments to the main function */
+static int x264_init_args(int *argc, const char **argv[]) 
+{
+    *argc = sizeof(main_arguments) >> 2;
+    *argv = main_arguments;
+
+    return 0;
+}
+
+/* initialize the run-time environment on TI C6400 platform */
+static int x264_init_platform(void)
+{
+    CSL_init();
+
+    /* set up 256KB 4-way associative cache */
+    CACHE_setL2Mode(CACHE_256KCACHE);
+    CACHE_reset();
+    CACHE_enableCaching(CACHE_EMIFA_CE00);
+
+    return 0;
+}
+#endif
+
 /****************************************************************************
  * main:
  ****************************************************************************/
@@ -90,6 +135,12 @@ int main( int argc, char **argv )
     x264_param_t param;
     cli_opt_t opt;
     int ret;
+
+#ifdef _TMS320C6400
+    x264_init_platform();
+    x264_init_args(&argc, (const char ***)&argv);
+    x264_init_align_check();
+#endif
 
 #ifdef PTW32_STATIC_LIB
     pthread_win32_process_attach_np();
@@ -107,8 +158,10 @@ int main( int argc, char **argv )
     if( Parse( argc, argv, &param, &opt ) < 0 )
         return -1;
 
+#ifndef _TMS320C6400
     /* Control-C handler */
     signal( SIGINT, SigIntHandler );
+#endif
 
     ret = Encode( &param, &opt );
 
@@ -828,7 +881,11 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     i_start = x264_mdate();
 
     /* Encode frames */
+#ifdef _TMS320C6400
+    for( i_frame = 0, i_file = 0; i_frame < i_frame_total || i_frame_total == 0; )
+#else
     for( i_frame = 0, i_file = 0; b_ctrl_c == 0 && (i_frame < i_frame_total || i_frame_total == 0); )
+#endif
     {
         if( p_read_frame( &pic, opt->hin, i_frame + opt->i_seek ) )
             break;
@@ -846,6 +903,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
 
         i_file += Encode_frame( h, opt->hout, &pic );
 
+        printf("%d\n", i_frame);
         i_frame++;
 
         /* update status line (up to 1000 times per input file) */
@@ -885,8 +943,10 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     x264_free( mux_buffer );
     fprintf( stderr, "\n" );
 
+#ifndef _TMS320C6400
     if( b_ctrl_c )
         fprintf( stderr, "aborted at input frame %d\n", opt->i_seek + i_frame );
+#endif
 
     p_close_infile( opt->hin );
     p_close_outfile( opt->hout );

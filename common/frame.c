@@ -616,6 +616,182 @@ static inline void deblock_edge_intra( x264_t *h, uint8_t *pix1, uint8_t *pix2, 
         pf_intra( pix2, i_stride, alpha, beta );
 }
 
+#ifdef _TMS320C6400
+#pragma DATA_ALIGN(bS, 4);
+static uint8_t bS[4]; /* filtering strength */
+
+void x264_frame_deblock_row( x264_t *h, int mb_y )
+{
+    const int s8x8 = 2 * h->mb.i_mb_stride;
+    const int s4x4 = 4 * h->mb.i_mb_stride;
+    const int b_interlaced = h->sh.b_mbaff;
+    const int mvy_limit = 4 >> b_interlaced;
+    const int qp_thresh = 15 - X264_MIN(h->sh.i_alpha_c0_offset, h->sh.i_beta_offset) - X264_MAX(0, h->param.analyse.i_chroma_qp_offset);
+    const int no_sub8x8 = !(h->param.analyse.inter & X264_ANALYSE_PSUB8x8);
+    int mb_x;
+    int stridey   = h->fdec->i_stride[0];
+    int stride2y  = stridey << b_interlaced;
+    int strideuv  = h->fdec->i_stride[1];
+    int stride2uv = strideuv << b_interlaced;
+
+    if( !h->pps->b_cabac && h->pps->b_transform_8x8_mode )
+        munge_cavlc_nnz( h, mb_y, h->mb.nnz_backup, munge_cavlc_nnz_row );
+
+    for( mb_x = 0; mb_x < h->sps->i_mb_width; mb_x += (~b_interlaced | mb_y)&1, mb_y ^= b_interlaced )
+    {
+        const int mb_xy  = mb_y * h->mb.i_mb_stride + mb_x;
+        const int mb_8x8 = 2 * s8x8 * mb_y + 2 * mb_x;
+        const int mb_4x4 = 4 * s4x4 * mb_y + 4 * mb_x;
+        const int b_8x8_transform = h->mb.mb_transform_size[mb_xy];
+        const int i_qp = h->mb.qp[mb_xy];
+        int i_edge_end = (h->mb.type[mb_xy] == P_SKIP) ? 1 : 4;
+        uint8_t *pixy = h->fdec->plane[0] + 16*mb_y*stridey  + 16*mb_x;
+        uint8_t *pixu = h->fdec->plane[1] +  8*mb_y*strideuv +  8*mb_x;
+        uint8_t *pixv = h->fdec->plane[2] +  8*mb_y*strideuv +  8*mb_x;
+        if( b_interlaced && (mb_y&1) )
+        {
+            pixy -= 15*stridey;
+            pixu -=  7*strideuv;
+            pixv -=  7*strideuv;
+        }
+
+        x264_prefetch_fenc( h, h->fdec, mb_x, mb_y );
+
+        if( i_qp <= qp_thresh )
+            i_edge_end = 1;
+
+        #define FILTER_DIR(intra, i_dir)\
+        {\
+            /* Y plane */\
+            i_qpn= h->mb.qp[mbn_xy];\
+            if( i_dir == 0 )\
+            {\
+                /* vertical edge */\
+                deblock_edge##intra( h, pixy + 4*i_edge, NULL,\
+                              stride2y, bS, (i_qp+i_qpn+1) >> 1, 0,\
+                              h->loopf.deblock_h_luma##intra );\
+                if( !(i_edge & 1) )\
+                {\
+                    /* U/V planes */\
+                    int i_qpc = (h->chroma_qp_table[i_qp] + h->chroma_qp_table[i_qpn] + 1) >> 1;\
+                    deblock_edge##intra( h, pixu + 2*i_edge, pixv + 2*i_edge,\
+                                  stride2uv, bS, i_qpc, 1,\
+                                  h->loopf.deblock_h_chroma##intra );\
+                }\
+            }\
+            else\
+            {\
+                /* horizontal edge */\
+                deblock_edge##intra( h, pixy + 4*i_edge*stride2y, NULL,\
+                              stride2y, bS, (i_qp+i_qpn+1) >> 1, 0,\
+                              h->loopf.deblock_v_luma##intra );\
+                /* U/V planes */\
+                if( !(i_edge & 1) )\
+                {\
+                    int i_qpc = (h->chroma_qp_table[i_qp] + h->chroma_qp_table[i_qpn] + 1) >> 1;\
+                    deblock_edge##intra( h, pixu + 2*i_edge*stride2uv, pixv + 2*i_edge*stride2uv,\
+                                  stride2uv, bS, i_qpc, 1,\
+                                  h->loopf.deblock_v_chroma##intra );\
+                }\
+            }\
+        }
+
+        #define DEBLOCK_STRENGTH(i_dir)\
+        {\
+            /* *** Get bS for each 4px for the current edge *** */\
+            if( IS_INTRA( h->mb.type[mb_xy] ) || IS_INTRA( h->mb.type[mbn_xy]) )\
+                _mem4(bS) = 0x03030303;\
+            else\
+            {\
+                _mem4(bS) = 0x00000000;\
+                for( i = 0; i < 4; i++ )\
+                {\
+                    int x  = i_dir == 0 ? i_edge : i;\
+                    int y  = i_dir == 0 ? i      : i_edge;\
+                    int xn = i_dir == 0 ? (x - 1)&0x03 : x;\
+                    int yn = i_dir == 0 ? y : (y - 1)&0x03;\
+                    if( h->mb.non_zero_count[mb_xy][x+y*4] != 0 ||\
+                        h->mb.non_zero_count[mbn_xy][xn+yn*4] != 0 )\
+                        bS[i] = 2;\
+                    else if(!(i_edge&no_sub8x8))\
+                    {\
+                        if((i&no_sub8x8) && bS[i-1] != 2)\
+                            bS[i] = bS[i-1];\
+                        else\
+                        {\
+                            /* FIXME: A given frame may occupy more than one position in\
+                             * the reference list. So we should compare the frame numbers,\
+                             * not the indices in the ref list.\
+                             * No harm yet, as we don't generate that case.*/\
+                            int i8p= mb_8x8+(x>>1)+(y>>1)*s8x8;\
+                            int i8q= mbn_8x8+(xn>>1)+(yn>>1)*s8x8;\
+                            int i4p= mb_4x4+x+y*s4x4;\
+                            int i4q= mbn_4x4+xn+yn*s4x4;\
+                            if((h->mb.ref[0][i8p] != h->mb.ref[0][i8q] ||\
+                                abs( h->mb.mv[0][i4p][0] - h->mb.mv[0][i4q][0] ) >= 4 ||\
+                                abs( h->mb.mv[0][i4p][1] - h->mb.mv[0][i4q][1] ) >= mvy_limit ) ||\
+                               (h->sh.i_type == SLICE_TYPE_B &&\
+                               (h->mb.ref[1][i8p] != h->mb.ref[1][i8q] ||\
+                                abs( h->mb.mv[1][i4p][0] - h->mb.mv[1][i4q][0] ) >= 4 ||\
+                                abs( h->mb.mv[1][i4p][1] - h->mb.mv[1][i4q][1] ) >= mvy_limit )))\
+                            {\
+                                bS[i] = 1;\
+                            }\
+                        }\
+                    }\
+                }\
+            }\
+        }
+
+        /* i_dir == 0 -> vertical edge
+         * i_dir == 1 -> horizontal edge */
+        #define DEBLOCK_DIR(i_dir)\
+        {\
+            int i_edge = (i_dir ? (mb_y <= b_interlaced) : (mb_x == 0));\
+            int i_qpn, i, mbn_xy, mbn_8x8, mbn_4x4;\
+            if( i_edge )\
+                i_edge+= b_8x8_transform;\
+            else\
+            {\
+                mbn_xy  = i_dir == 0 ? mb_xy  - 1 : mb_xy - h->mb.i_mb_stride;\
+                mbn_8x8 = i_dir == 0 ? mb_8x8 - 2 : mb_8x8 - 2 * s8x8;\
+                mbn_4x4 = i_dir == 0 ? mb_4x4 - 4 : mb_4x4 - 4 * s4x4;\
+                if( b_interlaced && i_dir == 1 )\
+                {\
+                    mbn_xy -= h->mb.i_mb_stride;\
+                    mbn_8x8 -= 2 * s8x8;\
+                    mbn_4x4 -= 4 * s4x4;\
+                }\
+                else if( IS_INTRA( h->mb.type[mb_xy] ) || IS_INTRA( h->mb.type[mbn_xy]) )\
+                {\
+                    FILTER_DIR( _intra, i_dir );\
+                    goto end##i_dir;\
+                }\
+                DEBLOCK_STRENGTH(i_dir);\
+                if( _mem4(bS) )\
+                    FILTER_DIR( , i_dir);\
+                end##i_dir:\
+                i_edge += b_8x8_transform+1;\
+            }\
+            mbn_xy  = mb_xy;\
+            mbn_8x8 = mb_8x8;\
+            mbn_4x4 = mb_4x4;\
+            for( ; i_edge < i_edge_end; i_edge+=b_8x8_transform+1 )\
+            {\
+                DEBLOCK_STRENGTH(i_dir);\
+                if( _mem4(bS) )\
+                    FILTER_DIR( , i_dir);\
+            }\
+        }
+
+        DEBLOCK_DIR(0);
+        DEBLOCK_DIR(1);
+    }
+
+    if( !h->pps->b_cabac && h->pps->b_transform_8x8_mode )
+        munge_cavlc_nnz( h, mb_y, h->mb.nnz_backup, restore_cavlc_nnz_row );
+}
+#else
 void x264_frame_deblock_row( x264_t *h, int mb_y )
 {
     const int s8x8 = 2 * h->mb.i_mb_stride;
@@ -788,6 +964,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
     if( !h->pps->b_cabac && h->pps->b_transform_8x8_mode )
         munge_cavlc_nnz( h, mb_y, h->mb.nnz_backup, restore_cavlc_nnz_row );
 }
+#endif /* _TMS320C6400 */
 
 void x264_frame_deblock( x264_t *h )
 {
@@ -904,7 +1081,11 @@ x264_frame_t *x264_frame_pop( x264_frame_t **list )
 {
     x264_frame_t *frame;
     int i = 0;
+#ifdef _TMS320C6400
+    assert( (int)list[0] );
+#else
     assert( list[0] );
+#endif
     while( list[i+1] ) i++;
     frame = list[i];
     list[i] = NULL;
@@ -926,7 +1107,11 @@ x264_frame_t *x264_frame_shift( x264_frame_t **list )
     int i;
     for( i = 0; list[i]; i++ )
         list[i] = list[i+1];
+#ifdef _TMS320C6400
+    assert((int)frame);
+#else
     assert(frame);
+#endif
     return frame;
 }
 

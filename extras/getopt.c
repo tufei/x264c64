@@ -131,7 +131,7 @@ int optind = 1;
    causes problems with re-calling getopt as programs generally don't
    know that. */
 
-int __getopt_initialized;
+int __getopt_initialized = 0; /* YFY--12/25/2008 */
 
 /* The next char to be scanned in the option-element
    in which the last option character we returned was found.
@@ -992,6 +992,14 @@ getopt_long (argc, argv, optstring, long_options, opt_index)
   return _getopt_internal (argc, argv, optstring, long_options, opt_index, 0);
 }
 
+#endif
+
+#ifdef _TMS320C6400
+int getopt_long(int argc, char * const *argv, const char *optstring, 
+    const struct option *long_options, int *opt_index)
+{
+  return _getopt_internal(argc, argv, optstring, long_options, opt_index, 0);
+}
 #endif
 
 #endif	/* Not ELIDE_CODE.  */

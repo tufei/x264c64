@@ -24,8 +24,13 @@
 #include <math.h>
 #include <limits.h>
 
+#ifdef _TMS320C6400
+#include "../common/common.h"
+#include "../common/cpu.h"
+#else
 #include "common/common.h"
 #include "common/cpu.h"
+#endif
 #include "macroblock.h"
 #include "me.h"
 
@@ -40,6 +45,224 @@ static void x264_lowres_context_init( x264_t *h, x264_mb_analysis_t *a )
     h->mb.b_chroma_me = 0;
 }
 
+#ifdef _TMS320C6400
+#pragma DATA_ALIGN(pix1_1, 8);
+static uint8_t pix1_1[9 * FDEC_STRIDE];
+#pragma DATA_ALIGN(mvc_5, 4);
+static int16_t mvc_5[4][2] = {{0}};
+#pragma DATA_ALIGN(edge_1, 16);
+static uint8_t edge_1[33];
+
+static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
+                            x264_frame_t **frames, int p0, int p1, int b,
+                            int dist_scale_factor, int do_search[2] )
+{
+    x264_frame_t *fref0 = frames[p0];
+    x264_frame_t *fref1 = frames[p1];
+    x264_frame_t *fenc  = frames[b];
+    const int b_bidir = (b < p1);
+    const int i_mb_x = h->mb.i_mb_x;
+    const int i_mb_y = h->mb.i_mb_y;
+    const int i_mb_stride = h->sps->i_mb_width;
+    const int i_mb_xy = i_mb_x + i_mb_y * i_mb_stride;
+    const int i_stride = fenc->i_stride_lowres;
+    const int i_pel_offset = 8 * ( i_mb_x + i_mb_y * i_stride );
+    const int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
+    int16_t (*fenc_mvs[2])[2];
+    int (*fenc_costs[2]);
+
+    uint8_t *pix2 = pix1_1+8;
+    x264_me_t m[2];
+    int i_bcost = COST_MAX;
+    int i_cost_bak;
+    int l, i;
+
+    fenc_mvs[0] = &frames[b]->lowres_mvs[0][b-p0-1][i_mb_xy];
+    fenc_mvs[1] = &frames[b]->lowres_mvs[1][p1-b-1][i_mb_xy];
+    fenc_costs[0] = &frames[b]->lowres_mv_costs[0][b-p0-1][i_mb_xy];
+    fenc_costs[1] = &frames[b]->lowres_mv_costs[1][p1-b-1][i_mb_xy];
+
+    h->mb.pic.p_fenc[0] = h->mb.pic.fenc_buf;
+    h->mc.copy[PIXEL_8x8]( h->mb.pic.p_fenc[0], FENC_STRIDE, &fenc->lowres[0][i_pel_offset], i_stride, 8 );
+
+    if( !p0 && !p1 && !b )
+        goto lowres_intra_mb;
+
+    // no need for h->mb.mv_min[]
+    h->mb.mv_min_fpel[0] = -8*h->mb.i_mb_x - 4;
+    h->mb.mv_max_fpel[0] = 8*( h->sps->i_mb_width - h->mb.i_mb_x - 1 ) + 4;
+    h->mb.mv_min_spel[0] = 4*( h->mb.mv_min_fpel[0] - 8 );
+    h->mb.mv_max_spel[0] = 4*( h->mb.mv_max_fpel[0] + 8 );
+    if( h->mb.i_mb_x >= h->sps->i_mb_width - 2 )
+    {
+        h->mb.mv_min_fpel[1] = -8*h->mb.i_mb_y - 4;
+        h->mb.mv_max_fpel[1] = 8*( h->sps->i_mb_height - h->mb.i_mb_y - 1 ) + 4;
+        h->mb.mv_min_spel[1] = 4*( h->mb.mv_min_fpel[1] - 8 );
+        h->mb.mv_max_spel[1] = 4*( h->mb.mv_max_fpel[1] + 8 );
+    }
+
+#define LOAD_HPELS_LUMA(dst, src) \
+    { \
+        (dst)[0] = &(src)[0][i_pel_offset]; \
+        (dst)[1] = &(src)[1][i_pel_offset]; \
+        (dst)[2] = &(src)[2][i_pel_offset]; \
+        (dst)[3] = &(src)[3][i_pel_offset]; \
+    }
+#define CLIP_MV( mv ) \
+    { \
+        mv[0] = x264_clip3( mv[0], h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] ); \
+        mv[1] = x264_clip3( mv[1], h->mb.mv_min_spel[1], h->mb.mv_max_spel[1] ); \
+    }
+#define TRY_BIDIR( mv0, mv1, penalty ) \
+    { \
+        int stride1 = 16, stride2 = 16; \
+        uint8_t *src1, *src2; \
+        int i_cost; \
+        src1 = h->mc.get_ref( pix1_1, &stride1, m[0].p_fref, m[0].i_stride[0], \
+                              (mv0)[0], (mv0)[1], 8, 8 ); \
+        src2 = h->mc.get_ref( pix2, &stride2, m[1].p_fref, m[1].i_stride[0], \
+                              (mv1)[0], (mv1)[1], 8, 8 ); \
+        h->mc.avg[PIXEL_8x8]( pix1_1, 16, src1, stride1, src2, stride2, i_bipred_weight ); \
+        i_cost = penalty + h->pixf.mbcmp[PIXEL_8x8]( \
+                           m[0].p_fenc[0], FENC_STRIDE, pix1_1, 16 ); \
+        if( i_bcost > i_cost ) \
+            i_bcost = i_cost; \
+    }
+
+    m[0].i_pixel = PIXEL_8x8;
+    m[0].p_cost_mv = a->p_cost_mv;
+    m[0].i_stride[0] = i_stride;
+    m[0].p_fenc[0] = h->mb.pic.p_fenc[0];
+    LOAD_HPELS_LUMA( m[0].p_fref, fref0->lowres );
+
+    if( b_bidir )
+    {
+        int16_t *mvr = fref1->lowres_mvs[0][p1-p0-1][i_mb_xy];
+        int dmv[2][2];
+        int mv0[2] = {0,0};
+
+        h->mc.memcpy_aligned( &m[1], &m[0], sizeof(x264_me_t) );
+        LOAD_HPELS_LUMA( m[1].p_fref, fref1->lowres );
+
+        dmv[0][0] = ( mvr[0] * dist_scale_factor + 128 ) >> 8;
+        dmv[0][1] = ( mvr[1] * dist_scale_factor + 128 ) >> 8;
+        dmv[1][0] = dmv[0][0] - mvr[0];
+        dmv[1][1] = dmv[0][1] - mvr[1];
+        CLIP_MV( dmv[0] );
+        CLIP_MV( dmv[1] );
+
+        TRY_BIDIR( dmv[0], dmv[1], 0 );
+        if( dmv[0][0] | dmv[0][1] | dmv[1][0] | dmv[1][1] )
+           TRY_BIDIR( mv0, mv0, 0 );
+//      if( i_bcost < 60 ) // arbitrary threshold
+//          return i_bcost;
+    }
+
+    i_cost_bak = i_bcost;
+    for( l = 0; l < 1 + b_bidir; l++ )
+    {
+        int i_mvc = 0;
+        int16_t (*fenc_mv)[2] = fenc_mvs[l];
+
+        memset(mvc_5, 0, 4 * 2 * sizeof(int16_t));
+        if( do_search[l] )
+        {
+            /* Reverse-order MV prediction. */
+#define MVC(mv) { _mem4(mvc_5[i_mvc]) = _mem4(mv); i_mvc++; }
+            if( i_mb_x < h->sps->i_mb_width - 1 )
+                MVC(fenc_mv[1]);
+            if( i_mb_y < h->sps->i_mb_height - 1 )
+            {
+                MVC(fenc_mv[i_mb_stride]);
+                if( i_mb_x > 0 )
+                    MVC(fenc_mv[i_mb_stride-1]);
+                if( i_mb_x < h->sps->i_mb_width - 1 )
+                    MVC(fenc_mv[i_mb_stride+1]);
+            }
+#undef MVC
+            x264_median_mv( m[l].mvp, mvc_5[0], mvc_5[1], mvc_5[2] );
+            x264_me_search( h, &m[l], mvc_5, i_mvc );
+
+            m[l].cost -= 2; // remove mvcost from skip mbs
+            if( _mem4(m[l].mv) )
+                m[l].cost += 5;
+            _mem4(fenc_mvs[l]) = _mem4(m[l].mv);
+            *fenc_costs[l] = m[l].cost;
+        }
+        else
+        {
+            _mem4(m[l].mv) = _mem4(fenc_mvs[l]);
+            m[l].cost = *fenc_costs[l];
+        }
+        i_bcost = X264_MIN( i_bcost, m[l].cost );
+    }
+
+    if( b_bidir && ( _mem4(m[0].mv) || _mem4(m[1].mv) ) )
+        TRY_BIDIR( m[0].mv, m[1].mv, 5 );
+
+lowres_intra_mb:
+    /* forbid intra-mbs in B-frames, because it's rare and not worth checking */
+    /* FIXME: Should we still forbid them now that we cache intra scores? */
+    if( !b_bidir )
+    {
+        int i_icost, b_intra;
+        if( !fenc->b_intra_calculated )
+        {
+            uint8_t *pix = &pix1_1[8+FDEC_STRIDE - 1];
+            uint8_t *src = &fenc->lowres[0][i_pel_offset - 1];
+            const int intra_penalty = 5;
+            int satds[4];
+
+            memcpy( pix-FDEC_STRIDE, src-i_stride, 17 );
+            for( i=0; i<8; i++ )
+                pix[i*FDEC_STRIDE] = src[i*i_stride];
+            pix++;
+
+            if( h->pixf.intra_satd_x3_8x8c && h->pixf.mbcmp[0] == h->pixf.satd[0] )
+            {
+                h->pixf.intra_satd_x3_8x8c( h->mb.pic.p_fenc[0], pix, satds );
+                h->predict_8x8c[I_PRED_CHROMA_P]( pix );
+                satds[I_PRED_CHROMA_P] =
+                    h->pixf.satd[PIXEL_8x8]( pix, FDEC_STRIDE, h->mb.pic.p_fenc[0], FENC_STRIDE );
+            }
+            else
+            {
+                for( i=0; i<4; i++ )
+                {
+                    h->predict_8x8c[i]( pix );
+                    satds[i] = h->pixf.mbcmp[PIXEL_8x8]( pix, FDEC_STRIDE, h->mb.pic.p_fenc[0], FENC_STRIDE );
+                }
+            }
+            i_icost = X264_MIN4( satds[0], satds[1], satds[2], satds[3] );
+
+            x264_predict_8x8_filter( pix, edge_1, ALL_NEIGHBORS, ALL_NEIGHBORS );
+            for( i=3; i<9; i++ )
+            {
+                int satd;
+                h->predict_8x8[i]( pix, edge_1 );
+                satd = h->pixf.mbcmp[PIXEL_8x8]( pix, FDEC_STRIDE, h->mb.pic.p_fenc[0], FENC_STRIDE );
+                i_icost = X264_MIN( i_icost, satd );
+            }
+
+            i_icost += intra_penalty;
+            fenc->i_intra_cost[i_mb_xy] = i_icost;
+        }
+        else
+            i_icost = fenc->i_intra_cost[i_mb_xy];
+        b_intra = i_icost < i_bcost;
+        if( b_intra )
+            i_bcost = i_icost;
+        if(    i_mb_x > 0 && i_mb_x < h->sps->i_mb_width - 1
+            && i_mb_y > 0 && i_mb_y < h->sps->i_mb_height - 1 )
+        {
+            fenc->i_intra_mbs[b-p0] += b_intra;
+            fenc->i_cost_est[0][0] += i_icost;
+        }
+    }
+
+    return i_bcost;
+}
+#else
 static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
                             x264_frame_t **frames, int p0, int p1, int b,
                             int dist_scale_factor, int do_search[2] )
@@ -246,6 +469,7 @@ lowres_intra_mb:
 
     return i_bcost;
 }
+#endif /* _TMS320C6400 */
 #undef TRY_BIDIR
 
 #define NUM_MBS\
@@ -401,6 +625,9 @@ static void x264_slicetype_path( x264_t *h, x264_mb_analysis_t *a, x264_frame_t 
     int best_path_index = 0;
     length = X264_MIN(length,MAX_LENGTH);
 
+#ifdef _TMS320C6400
+    memset(paths, 0, MAX_LENGTH * (X264_BFRAME_MAX + 2));
+#endif
     /* Iterate over all currently possible paths and add suffixes to each one */
     for( suffix_size = 0; suffix_size < num_paths; suffix_size++ )
     {

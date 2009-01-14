@@ -41,6 +41,7 @@
 #include "visualize.h"
 #include "display.h"
 
+#if VISUALIZE
 typedef struct {
     int     i_type;
     int     i_partition;
@@ -317,5 +318,6 @@ void x264_visualize_show( x264_t *h )
     if (waitkey) getchar();
 }
 /* }}} */
+#endif /* VISUALIZE */
 
 //EOF

@@ -30,7 +30,9 @@
 #include "config.h"
 #endif
 
+#ifndef _TMS320C6400
 #include <sys/types.h>
+#endif
 
 #ifdef AVIS_INPUT
 #include <windows.h>
@@ -290,8 +292,13 @@ int read_frame_y4m( x264_picture_t *p_pic, hnd_t handle, int i_frame )
     header[slen] = 0;
     if (strncmp(header, Y4M_FRAME_MAGIC, slen))
     {
+#ifndef _TMS320C6400
         fprintf(stderr, "Bad header magic (%"PRIx32" <=> %s)\n",
+                _mem4(header), header);
+#else
+        fprintf(stderr, "Bad header magic (%lx <=> %s)\n",
                 *((uint32_t*)header), header);
+#endif
         return -1;
     }
 
