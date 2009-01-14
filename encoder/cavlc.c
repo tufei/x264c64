@@ -100,7 +100,7 @@ static inline int block_residual_write_cavlc_escape( x264_t *h, bs_t *s, int i_s
                 /* Weight highly against overflows. */
                 s->i_bits_encoded += 1000000;
 #else
-                x264_log(h, X264_LOG_WARNING, "OVERFLOW levelcode=%d is only allowed in High Profile", i_level_code );
+                x264_log(h, X264_LOG_WARNING, "OVERFLOW levelcode=%d is only allowed in High Profile\n", i_level_code );
                 /* clip level, preserving sign */
                 i_level_code = (1<<12) - 2 + (i_level_code & 1);
 #endif
@@ -120,8 +120,8 @@ static void block_residual_write_cavlc( x264_t *h, bs_t *s, int i_ctxBlockCat, i
 {
     static const uint8_t ct_index[17] = {0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,3};
     static const uint8_t ctz_index[8] = {3,0,1,0,2,0,1,0};
-    int level[16], run[16];
-    int i_trailing, i_total_zero, i_last, i_suffix_length, i;
+    x264_run_level_t runlevel;
+    int i_trailing, i_total_zero, i_suffix_length, i;
     int i_total = 0;
     unsigned int i_sign;
     /* x264_mb_predict_non_zero_code return 0 <-> (16+16+1)>>1 = 16 */
@@ -129,40 +129,30 @@ static void block_residual_write_cavlc( x264_t *h, bs_t *s, int i_ctxBlockCat, i
 
     if( !h->mb.cache.non_zero_count[x264_scan8[i_idx]] )
     {
-        bs_write_vlc( s, x264_coeff_token[nC][0] );
+        bs_write_vlc( s, x264_coeff0_token[nC] );
         return;
     }
 
-    i_last = h->quantf.coeff_last[i_ctxBlockCat](l);
-    i_total_zero = i_last + 1;
-
     /* level and run and total */
     /* set these to 2 to allow branchless i_trailing calculation */
-    level[1] = 2;
-    level[2] = 2;
-    do
-    {
-        int r = 0;
-        level[i_total] = l[i_last];
-        while( --i_last >= 0 && l[i_last] == 0 )
-            r++;
-        run[i_total++] = r;
-    } while( i_last >= 0 );
+    runlevel.level[1] = 2;
+    runlevel.level[2] = 2;
+    i_total = h->quantf.coeff_level_run[i_ctxBlockCat]( l, &runlevel );
+    i_total_zero = runlevel.last + 1 - i_total;
 
     h->mb.cache.non_zero_count[x264_scan8[i_idx]] = i_total;
 
-    i_total_zero -= i_total;
-    i_trailing = ((((level[0]+1) | (1-level[0])) >> 31) & 1) // abs(level[0])>1
-               | ((((level[1]+1) | (1-level[1])) >> 31) & 2)
-               | ((((level[2]+1) | (1-level[2])) >> 31) & 4);
+    i_trailing = ((((runlevel.level[0]+1) | (1-runlevel.level[0])) >> 31) & 1) // abs(runlevel.level[0])>1
+               | ((((runlevel.level[1]+1) | (1-runlevel.level[1])) >> 31) & 2)
+               | ((((runlevel.level[2]+1) | (1-runlevel.level[2])) >> 31) & 4);
     i_trailing = ctz_index[i_trailing];
-    i_sign = ((level[2] >> 31) & 1)
-           | ((level[1] >> 31) & 2)
-           | ((level[0] >> 31) & 4);
+    i_sign = ((runlevel.level[2] >> 31) & 1)
+           | ((runlevel.level[1] >> 31) & 2)
+           | ((runlevel.level[0] >> 31) & 4);
     i_sign >>= 3-i_trailing;
 
     /* total/trailing */
-    bs_write_vlc( s, x264_coeff_token[nC][i_total*4+i_trailing] );
+    bs_write_vlc( s, x264_coeff_token[nC][i_total*4+i_trailing-4] );
 
     i_suffix_length = i_total > 10 && i_trailing < 3;
     if( i_trailing > 0 || RDO_SKIP_BS )
@@ -170,10 +160,10 @@ static void block_residual_write_cavlc( x264_t *h, bs_t *s, int i_ctxBlockCat, i
 
     if( i_trailing < i_total )
     {
-        int16_t val = level[i_trailing];
-        int16_t val_original = level[i_trailing]+LEVEL_TABLE_SIZE/2;
+        int16_t val = runlevel.level[i_trailing];
+        int16_t val_original = runlevel.level[i_trailing]+LEVEL_TABLE_SIZE/2;
         if( i_trailing < 3 )
-            val -= (val>>15)|1; /* as level[i] can't be 1 for the first one if i_trailing < 3 */
+            val -= (val>>15)|1; /* as runlevel.level[i] can't be 1 for the first one if i_trailing < 3 */
         val += LEVEL_TABLE_SIZE/2;
 
         if( (unsigned)val_original < LEVEL_TABLE_SIZE )
@@ -185,7 +175,7 @@ static void block_residual_write_cavlc( x264_t *h, bs_t *s, int i_ctxBlockCat, i
             i_suffix_length = block_residual_write_cavlc_escape( h, s, i_suffix_length, val-LEVEL_TABLE_SIZE/2 );
         for( i = i_trailing+1; i < i_total; i++ )
         {
-            val = level[i] + LEVEL_TABLE_SIZE/2;
+            val = runlevel.level[i] + LEVEL_TABLE_SIZE/2;
             if( (unsigned)val < LEVEL_TABLE_SIZE )
             {
                 bs_write_vlc( s, x264_level_token[i_suffix_length][val] );
@@ -207,8 +197,8 @@ static void block_residual_write_cavlc( x264_t *h, bs_t *s, int i_ctxBlockCat, i
     for( i = 0; i < i_total-1 && i_total_zero > 0; i++ )
     {
         int i_zl = X264_MIN( i_total_zero - 1, 6 );
-        bs_write_vlc( s, x264_run_before[i_zl][run[i]] );
-        i_total_zero -= run[i];
+        bs_write_vlc( s, x264_run_before[i_zl][runlevel.run[i]] );
+        i_total_zero -= runlevel.run[i];
     }
 }
 
@@ -453,17 +443,17 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
     }
     else if( i_mb_type == P_8x8 )
     {
-        int b_sub_ref0;
+        int b_sub_ref;
         if( (h->mb.cache.ref[0][x264_scan8[0]] | h->mb.cache.ref[0][x264_scan8[ 4]] |
              h->mb.cache.ref[0][x264_scan8[8]] | h->mb.cache.ref[0][x264_scan8[12]]) == 0 )
         {
             bs_write_ue( s, 4 );
-            b_sub_ref0 = 0;
+            b_sub_ref = 0;
         }
         else
         {
             bs_write_ue( s, 3 );
-            b_sub_ref0 = 1;
+            b_sub_ref = h->mb.pic.i_fref[0] > 1;
         }
 
         /* sub mb type */
@@ -474,7 +464,7 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
             bs_write( s, 4, 0xf );
 
         /* ref0 */
-        if( h->mb.pic.i_fref[0] > 1 && b_sub_ref0 )
+        if( b_sub_ref )
         {
             bs_write_te( s, h->mb.pic.i_fref[0] - 1, h->mb.cache.ref[0][x264_scan8[0]] );
             bs_write_te( s, h->mb.pic.i_fref[0] - 1, h->mb.cache.ref[0][x264_scan8[4]] );

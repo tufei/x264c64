@@ -620,7 +620,7 @@ static int parse_zone( x264_t *h, x264_zone_t *z, char *p )
     p += len;
     if( !*p )
         return 0;
-    z->param = malloc( sizeof(x264_param_t) );
+    z->param = x264_malloc( sizeof(x264_param_t) );
     memcpy( z->param, &h->param, sizeof(x264_param_t) );
     while( (tok = strtok_r( p, ",", &saveptr )) )
     {
@@ -1520,7 +1520,7 @@ static float rate_estimate_qscale( x264_t *h )
                     expected_size = qscale2bits(&rce, q);
                     expected_vbv = rcc->buffer_fill + rcc->buffer_rate - expected_size;
                 }
-                rcc->last_satd = x264_rc_analyse_slice( h );
+                rcc->last_satd = x264_stack_align( x264_rc_analyse_slice, h );
             }
             q = x264_clip3f( q, lmin, lmax );
         }
@@ -1538,7 +1538,7 @@ static float rate_estimate_qscale( x264_t *h )
 
             double wanted_bits, overflow=1, lmin, lmax;
 
-            rcc->last_satd = x264_rc_analyse_slice( h );
+            rcc->last_satd = x264_stack_align( x264_rc_analyse_slice, h );
             rcc->short_term_cplxsum *= 0.5;
             rcc->short_term_cplxcount *= 0.5;
             rcc->short_term_cplxsum += rcc->last_satd;

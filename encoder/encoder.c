@@ -416,6 +416,7 @@ static int x264_validate_parameters( x264_t *h )
         h->param.analyse.b_fast_pskip = 0;
         h->param.analyse.i_noise_reduction = 0;
         h->param.analyse.f_psy_rd = 0;
+        h->param.i_bframe = 0;
         /* 8x8dct is not useful at all in CAVLC lossless */
         if( !h->param.b_cabac )
             h->param.analyse.b_transform_8x8 = 0;
@@ -830,7 +831,9 @@ int x264_encoder_reconfig( x264_t *h, x264_param_t *param )
     COPY( analyse.intra );
     COPY( analyse.inter );
     COPY( analyse.i_direct_mv_pred );
-    COPY( analyse.i_me_range );
+    /* Scratch buffer prevents me_range from being increased for esa/tesa */
+    if( h->param.analyse.i_me_method < X264_ME_ESA || param->analyse.i_me_range < h->param.analyse.i_me_range )
+        COPY( analyse.i_me_range );
     COPY( analyse.i_noise_reduction );
     /* We can't switch out of subme=0 during encoding. */
     if( h->param.analyse.i_subpel_refine )
@@ -1054,7 +1057,7 @@ static void x264_fdec_filter_row( x264_t *h, int mb_y )
             x264_pixel_ssim_wxh( &h->pixf,
                 h->fdec->plane[0] + 2+min_y*h->fdec->i_stride[0], h->fdec->i_stride[0],
                 h->fenc->plane[0] + 2+min_y*h->fenc->i_stride[0], h->fenc->i_stride[0],
-                h->param.i_width-2, max_y-min_y );
+                h->param.i_width-2, max_y-min_y, h->scratch_buffer );
     }
 }
 
@@ -1441,7 +1444,7 @@ int     x264_encoder_encode( x264_t *h,
             return 0;
         }
 
-        x264_slicetype_decide( h );
+        x264_stack_align( x264_slicetype_decide, h );
 
         /* 3: move some B-frames and 1 non-B to encode queue */
         while( IS_X264_TYPE_B( h->frames.next[bframes]->i_type ) )

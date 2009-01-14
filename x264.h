@@ -62,6 +62,7 @@ typedef struct x264_t x264_t;
 #define X264_CPU_SSE4           0x002000  /* SSE4.1 */
 #define X264_CPU_SSE42          0x004000  /* SSE4.2 */
 #define X264_CPU_SSE_MISALIGN   0x008000  /* Phenom support for misaligned SSE instruction arguments */
+#define X264_CPU_LZCNT          0x010000  /* Phenom support for "leading zero count" instruction. */
 
 /* Analyse flags
  */
@@ -341,7 +342,11 @@ typedef struct
 
 typedef struct
 {
-    /* In: force picture type (if not auto) XXX: ignored for now
+    /* In: force picture type (if not auto)
+     *     If x264 encoding parameters are violated in the forcing of picture types,
+     *     x264 will correct the input picture type and log a warning.
+     *     The quality of frametype decisions may suffer if a great deal of fine-grained
+     *     mixing of auto and forced frametypes is done.
      * Out: type of the picture encoded */
     int     i_type;
     /* In: force quantizer for > 0 */

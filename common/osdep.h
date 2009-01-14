@@ -47,6 +47,7 @@
 #define fseek _fseeki64
 #define ftell _ftelli64
 #define isfinite _finite
+#define strtok_r strtok_s
 #define _CRT_SECURE_NO_DEPRECATE
 #define X264_VERSION "" // no configure script for msvc
 #endif
@@ -198,7 +199,7 @@ static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
 }
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 3)
 #define x264_clz(x) __builtin_clz(x)
 #elif defined(_TMS320C6400)
 static int ALWAYS_INLINE x264_clz( uint32_t x )
