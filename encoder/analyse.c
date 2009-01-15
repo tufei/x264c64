@@ -208,8 +208,17 @@ static void x264_mb_analyse_load_costs( x264_t *h, x264_mb_analysis_t *a )
         p_cost_mv[a->i_qp] += 2*4*2048;
         for( i = 0; i <= 2*4*2048; i++ )
         {
+#ifdef _TMS320C6400
+            float temp;
+
+            temp = log10f(i + 1) / log10f(2.0f); /* there is a bug in log2f() in C64 library */
+            temp = a->i_lambda * (temp * 2 + 0.718f + !!i) + .5f;
+            p_cost_mv[a->i_qp][-i] =
+            p_cost_mv[a->i_qp][i]  = temp;
+#else
             p_cost_mv[a->i_qp][-i] =
             p_cost_mv[a->i_qp][i]  = a->i_lambda * (log2f(i+1)*2 + 0.718f + !!i) + .5f;
+#endif
         }
         for( i = 0; i < 3; i++ )
             for( j = 0; j < 33; j++ )

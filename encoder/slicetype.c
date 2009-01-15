@@ -869,6 +869,10 @@ int x264_rc_analyse_slice( x264_t *h )
     int p0=0, p1, b;
     int cost;
 
+#ifdef _TMS320C6400
+    memset(frames, 0, sizeof(frames));
+#endif
+
     x264_lowres_context_init( h, &a );
 
     if( IS_X264_TYPE_I(h->fenc->i_type) )
