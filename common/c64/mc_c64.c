@@ -23,6 +23,41 @@
 #include "common.h"
 #include "mc.h"
 
+static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,
+                              uint8_t *src1, int i_src1_stride,
+                              uint8_t *src2, int i_src2_stride,
+                              int i_width, int i_height )
+{
+    int x, y;
+
+    if((i_width & 0x03) == 0)
+    {
+        for( y = 0; y < i_height; y++ )
+        {
+            for( x = 0; x < i_width; x += 4 )
+            {
+                _mem4(&dst[x]) = _avgu4(_mem4_const(&src1[x]), _mem4_const(&src2[x]));
+            }
+            dst  += i_dst_stride;
+            src1 += i_src1_stride;
+            src2 += i_src2_stride;
+        }
+    }
+    else
+    {
+        for( y = 0; y < i_height; y++ )
+        {
+            for( x = 0; x < i_width; x++ )
+            {
+                dst[x] = ( src1[x] + src2[x] + 1 ) >> 1;
+            }
+            dst  += i_dst_stride;
+            src1 += i_src1_stride;
+            src2 += i_src2_stride;
+        }
+    }
+}
+
 static inline void pixel_avg_wxh( uint8_t *dst, int i_dst, uint8_t *src1, int i_src1, uint8_t *src2, int i_src2, int width, int height )
 {
     int x, y;
@@ -63,10 +98,10 @@ static inline void pixel_avg_weight_wxh( uint8_t *dst, int i_dst, uint8_t *src1,
 {
     const uint8_t i_weight2 = 64 - (uint8_t)i_weight1;
     int x, y;
-    uint32_t a = 32 * (0x00010001U);
-    uint32_t mask = 0x03FF03FFU;
-    const uint32_t s1 = i_weight1 * (width == 2 ? 0x00000101U : 0x01010101U);
-    const uint32_t s2 = i_weight2 * (width == 2 ? 0x00000101U : 0x01010101U);
+    register const uint32_t a = 32 * (0x00010001U);
+    register const uint32_t mask = 0x03FF03FFU;
+    register const uint32_t s1 = i_weight1 * (width == 2 ? 0x00000101U : 0x01010101U);
+    register const uint32_t s2 = i_weight2 * (width == 2 ? 0x00000101U : 0x01010101U);
     uint16_t temp1[4], temp2[4];
 
     if(width == 2) 
@@ -124,8 +159,158 @@ PIXEL_AVG_C64( x264_pixel_avg_4x2_c64,    4,  2 )
 PIXEL_AVG_C64( x264_pixel_avg_2x4_c64,    2,  4 )
 PIXEL_AVG_C64( x264_pixel_avg_2x2_c64,    2,  2 )
 
+static void mc_copy( uint8_t *src, int i_src_stride, uint8_t *dst, int i_dst_stride, int i_width, int i_height )
+{
+    int y;
+
+    for( y = 0; y < i_height; y++ )
+    {
+        memcpy( dst, src, i_width );
+
+        src += i_src_stride;
+        dst += i_dst_stride;
+    }
+}
+
+#if 0
+#define TAPFILTER(pix, d) ((pix)[x-2*d] + (pix)[x+3*d] - 5*((pix)[x-d] + (pix)[x+2*d]) + 20*((pix)[x] + (pix)[x+d]))
+static void hpel_filter( uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src,
+                         int stride, int width, int height, int16_t *buf )
+{
+    int x, y;
+    for( y=0; y<height; y++ )
+    {
+        for( x=-2; x<width+3; x++ )
+        {
+            int v = TAPFILTER(src,stride);
+            dstv[x] = x264_clip_uint8((v + 16) >> 5);
+            buf[x+2] = v;
+        }
+        for( x=0; x<width; x++ )
+            dstc[x] = x264_clip_uint8((TAPFILTER(buf+2,1) + 512) >> 10);
+        for( x=0; x<width; x++ )
+            dsth[x] = x264_clip_uint8((TAPFILTER(src,1) + 16) >> 5);
+        dsth += stride;
+        dstv += stride;
+        dstc += stride;
+        src += stride;
+    }
+}
+#endif /*0*/
+
+static const int hpel_ref0[16] = {0,1,1,1,0,1,1,1,2,3,3,3,0,1,1,1};
+static const int hpel_ref1[16] = {0,0,0,0,2,2,3,2,2,2,3,2,2,2,3,2};
+
+static void mc_luma_c64( uint8_t *dst, int i_dst_stride, uint8_t *src[4], int i_src_stride, int mvx, int mvy, int i_width, int i_height )
+{
+    int qpel_idx = ((mvy & 3) << 2) + (mvx & 3);
+    int offset = (mvy >> 2) * i_src_stride + (mvx >> 2);
+    uint8_t *src1 = src[hpel_ref0[qpel_idx]] + offset + ((mvy & 3) == 3) * i_src_stride;
+
+    if( qpel_idx & 5 ) /* qpel interpolation needed */
+    {
+        uint8_t *src2 = src[hpel_ref1[qpel_idx]] + offset + ((mvx & 3) == 3);
+        pixel_avg( dst, i_dst_stride, src1, i_src_stride, src2, i_src_stride, i_width, i_height );
+    }
+    else
+    {
+        mc_copy( src1, i_src_stride, dst, i_dst_stride, i_width, i_height );
+    }
+}
+
+static uint8_t *get_ref_c64( uint8_t *dst, int *i_dst_stride, uint8_t *src[4], int i_src_stride, int mvx, int mvy, int i_width, int i_height )
+{
+    int qpel_idx = ((mvy & 3) << 2) + (mvx & 3);
+    int offset = (mvy >> 2) * i_src_stride + (mvx >> 2);
+    uint8_t *src1 = src[hpel_ref0[qpel_idx]] + offset + ((mvy & 3) == 3) * i_src_stride;
+
+    if( qpel_idx & 5 ) /* qpel interpolation needed */
+    {
+        uint8_t *src2 = src[hpel_ref1[qpel_idx]] + offset + ((mvx & 3) == 3);
+        pixel_avg( dst, *i_dst_stride, src1, i_src_stride, src2, i_src_stride, i_width, i_height );
+        return dst;
+    }
+    else
+    {
+        *i_dst_stride = i_src_stride;
+        return src1;
+    }
+}
+
+/* full chroma mc (ie until 1/8 pixel)*/
+static void mc_chroma_c64( uint8_t *dst, int i_dst_stride, uint8_t *src, int i_src_stride, int mvx, int mvy, int i_width, int i_height )
+{
+    uint8_t *srcp;
+    int x, y;
+
+    const int d8x = mvx & 0x07;
+    const int d8y = mvy & 0x07;
+
+    const int16_t cA = (8 - d8x) * (8 - d8y);
+    const int16_t cB = d8x * (8 - d8y);
+    const int16_t cC = (8 - d8x) * d8y;
+    const int16_t cD = d8x * d8y;
+    register const int32_t cBcA = _pack2(cB, cA);
+    register const int32_t cDcC = _pack2(cD, cC);
+
+    register uint32_t data_up, data_down;
+    register int unpack_up, unpack_down;
+
+    uint8_t *src_buffered, *srcp_buffered;
+
+    src += (mvy >> 3) * i_src_stride + (mvx >> 3);
+    srcp = &src[i_src_stride];
+
+    src_buffered = src;
+    srcp_buffered = srcp;
+
+    for( y = 0; y < i_height; y++ )
+    {
+        for( x = 0; x < i_width; x += 4 )
+        {
+            data_up = _mem4_const(&src[x]);
+            data_down = _mem4_const(&srcp[x]);
+
+            unpack_up = _unpklu4(data_up);
+            unpack_up = _dotp2(cBcA, unpack_up);
+            unpack_down = _unpklu4(data_down);
+            unpack_down = _dotp2(cDcC, unpack_down);
+            dst[x] = (unpack_up + unpack_down + 32) >> 6;
+
+            unpack_up = _unpkhu4(data_up);
+            unpack_up = _dotp2(cBcA, unpack_up);
+            unpack_down = _unpkhu4(data_down);
+            unpack_down = _dotp2(cDcC, unpack_down);
+            dst[x + 2] = (unpack_up + unpack_down + 32) >> 6;
+            
+            data_up = _mem4_const(&src[x + 1]);
+            data_down = _mem4_const(&srcp[x + 1]);
+
+            unpack_up = _unpklu4(data_up);
+            unpack_up = _dotp2(cBcA, unpack_up);
+            unpack_down = _unpklu4(data_down);
+            unpack_down = _dotp2(cDcC, unpack_down);
+            dst[x + 1] = (unpack_up + unpack_down + 32) >> 6;
+
+            unpack_up = _unpkhu4(data_up);
+            unpack_up = _dotp2(cBcA, unpack_up);
+            unpack_down = _unpkhu4(data_down);
+            unpack_down = _dotp2(cDcC, unpack_down);
+            dst[x + 3] = (unpack_up + unpack_down + 32) >> 6;
+        }
+        dst  += i_dst_stride;
+
+        src   = srcp;
+        srcp += i_src_stride;
+    }
+}
+
 void x264_mc_init_c64(x264_mc_functions_t *pf)
 {
+    pf->mc_luma = mc_luma_c64;
+    pf->get_ref = get_ref_c64;
+    pf->mc_chroma = mc_chroma_c64;
+
     pf->avg[PIXEL_16x16] = x264_pixel_avg_16x16_c64;
     pf->avg[PIXEL_16x8]  = x264_pixel_avg_16x8_c64;
     pf->avg[PIXEL_8x16]  = x264_pixel_avg_8x16_c64;
