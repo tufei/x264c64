@@ -49,6 +49,8 @@ void x264_init_align_check(void)
     assert(X264_ALIGN_CHECK_UNNAMED(struct x264_t, dct, luma8x8, 16));
     assert(X264_ALIGN_CHECK_UNNAMED(struct x264_t, dct, luma4x4, 16));
 
+    assert(X264_ALIGN_CHECK_UNNAMED(struct x264_t, mb, i_sub_partition, 4));
+
     assert(X264_ALIGN_CHECK_UNNAMED1(struct x264_t, mb, pic, fenc_buf, 16));
     assert(X264_ALIGN_CHECK_UNNAMED1(struct x264_t, mb, pic, fdec_buf, 16));
     assert(X264_ALIGN_CHECK_UNNAMED1(struct x264_t, mb, pic, i4x4_fdec_buf, 16));
