@@ -29,6 +29,7 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 #else
+#include "common/c64/timer.h"
 #include "extras/getopt.h"
 #include "extras/align_check.h"
 #include <stdint.h>
@@ -98,10 +99,10 @@ const char *main_arguments[] =
 {
     "x264.out",
     "--bitrate", "400",
+    "-b", "2",
     "-w",
-	"-b", "2",
-    "-o", "football.264",
-    "C:\\CCStudio_v3.1\\football_sif.y4m"
+    "-o", "suzie.264",
+    "C:\\CCStudio_v3.1\\suzie_qcif.y4m"
 };
 
 /* this is a hack function to initialize the arguments to the main function */
@@ -123,6 +124,11 @@ static int x264_init_platform(void)
     CACHE_reset();
     CACHE_enableCaching(CACHE_EMIFA_CE00);
 
+    if(c64_timer_init()) 
+    {
+        fprintf(stderr, "x264 [error]: error calling c64_timer_init()\n");
+        return -1;
+    } 
     return 0;
 }
 #endif
@@ -137,7 +143,11 @@ int main( int argc, char **argv )
     int ret;
 
 #ifdef _TMS320C6400
-    x264_init_platform();
+    if(x264_init_platform()) 
+    {
+        fprintf(stderr, "x264 [error]: error calling x264_init_platform()\n");
+        return -1;
+    }
     x264_init_args(&argc, (const char ***)&argv);
     x264_init_align_check();
 #endif

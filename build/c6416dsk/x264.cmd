@@ -37,6 +37,7 @@ MEMORY
 
 SECTIONS
 {
+    .vector:    > IST
 	.text:		> ISRAM
 	.cinit:		> SDRAM
 	.data:		> ISRAM

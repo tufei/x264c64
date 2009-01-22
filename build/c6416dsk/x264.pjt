@@ -14,6 +14,8 @@ Config="Release"
 [Source Files]
 Source="..\..\C6000\cgtools\lib\rts6400.lib"
 Source="..\..\C6000\csl\lib\csl6416.lib"
+Source="common\c64\ivt.s"
+Source="common\c64\timer.c"
 Source="Debug\common.lib"
 Source="encoder\analyse.c"
 Source="encoder\cabac.c"
