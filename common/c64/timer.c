@@ -59,8 +59,6 @@ int c64_timer_init(void)
 
     /* note that interrupt vector 15 is set up in ivt.s */
     IRQ_map(IRQ_EVT_TINT2, 15);
-    IRQ_globalEnable();
-    IRQ_enable(IRQ_EVT_TINT2);
 
     /* initialize timer */
     h = TIMER_open(TIMER_DEV2, TIMER_OPEN_RESET);
@@ -69,7 +67,11 @@ int c64_timer_init(void)
         fprintf(stderr, "x264 [error]: error open timer device\n");
         return -1;
     }
-    TIMER_configArgs(h, 0x00000200U, 0x00000001U, 0x00000000U);
+    TIMER_configArgs(h, 0x00000200U, 0xFFFFFFFFU, 0x00000000U);
+
+    IRQ_globalEnable();
+    IRQ_nmiEnable();
+    IRQ_enable(IRQ_EVT_TINT2);
     return 0;
 }
 

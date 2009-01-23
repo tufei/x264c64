@@ -128,7 +128,16 @@ static int x264_init_platform(void)
     {
         fprintf(stderr, "x264 [error]: error calling c64_timer_init()\n");
         return -1;
-    } 
+    }
+    c64_timer_go();
+    c64_timer_hold();
+    fprintf(stdout, "x264 [info]: cycle counter go-hold overhead %d cycles\n", c64_timer_read());
+    return 0;
+}
+
+static int x264_close_platform(void) 
+{
+    c64_timer_close();
     return 0;
 }
 #endif
@@ -178,6 +187,10 @@ int main( int argc, char **argv )
 #ifdef PTW32_STATIC_LIB
     pthread_win32_thread_detach_np();
     pthread_win32_process_detach_np();
+#endif
+
+#ifdef _TMS320C6400
+    x264_close_platform(); 
 #endif
 
     return ret;
