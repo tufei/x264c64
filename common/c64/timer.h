@@ -23,11 +23,14 @@
 #ifndef X264_C64_TIMER_H
 #define X264_C64_TIMER_H
 
+#include <stdint.h>
+
 int c64_timer_init(void);
 void c64_timer_reset(void);
 void c64_timer_go(void);
 void c64_timer_hold(void);
 void c64_timer_close(void); 
+uint64_t c64_timer_read(void); 
 
 #endif /* X264_C64_TIMER_H */
 

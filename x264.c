@@ -131,12 +131,13 @@ static int x264_init_platform(void)
     }
     c64_timer_go();
     c64_timer_hold();
-    fprintf(stdout, "x264 [info]: cycle counter go-hold overhead %d cycles\n", c64_timer_read());
+    fprintf(stdout, "x264 [info]: cycle counter go-hold overhead %llu cycles\n", c64_timer_read());
     return 0;
 }
 
 static int x264_close_platform(void) 
 {
+    fprintf(stdout, "x264 [info]: cycle counter reading %llu cycles\n", c64_timer_read());
     c64_timer_close();
     return 0;
 }

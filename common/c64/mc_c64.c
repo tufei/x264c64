@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "mc.h"
+#include "timer.h"
 
 static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,
                               uint8_t *src1, int i_src1_stride,
@@ -345,13 +346,8 @@ static void mc_chroma_c64( uint8_t *dst, int i_dst_stride, uint8_t *src, int i_s
     register uint32_t data_up, data_down;
     register int unpack_up, unpack_down;
 
-    uint8_t *src_buffered, *srcp_buffered;
-
     src += (mvy >> 3) * i_src_stride + (mvx >> 3);
     srcp = &src[i_src_stride];
-
-    src_buffered = src;
-    srcp_buffered = srcp;
 
     for( y = 0; y < i_height; y++ )
     {
@@ -394,6 +390,43 @@ static void mc_chroma_c64( uint8_t *dst, int i_dst_stride, uint8_t *src, int i_s
     }
 }
 
+static void mc_copy_w4_c64( uint8_t *dst, int i_dst, uint8_t *src, int i_src, int i_height )
+{
+    int y;
+
+    for( y = 0; y < i_height; y++ )
+    {
+        _mem4(dst) = _mem4_const(src);
+        src += i_src;
+        dst += i_dst;
+    }
+}
+
+static void mc_copy_w8_c64( uint8_t *dst, int i_dst, uint8_t *src, int i_src, int i_height )
+{
+    int y;
+
+    for( y = 0; y < i_height; y++ )
+    {
+        _mem8(dst) = _mem8_const(src);
+        src += i_src;
+        dst += i_dst;
+    }
+}
+
+static void mc_copy_w16_c64( uint8_t *dst, int i_dst, uint8_t *src, int i_src, int i_height )
+{
+    int y;
+
+    for( y = 0; y < i_height; y++ )
+    {
+        _mem8(dst) = _mem8_const(src);
+        _mem8(&dst[8]) = _mem8_const(&src[8]);
+        src += i_src;
+        dst += i_dst;
+    }
+}
+
 void x264_mc_init_c64(x264_mc_functions_t *pf)
 {
     pf->mc_luma = mc_luma_c64;
@@ -410,6 +443,11 @@ void x264_mc_init_c64(x264_mc_functions_t *pf)
     pf->avg[PIXEL_4x2]   = x264_pixel_avg_4x2_c64;
     pf->avg[PIXEL_2x4]   = x264_pixel_avg_2x4_c64;
     pf->avg[PIXEL_2x2]   = x264_pixel_avg_2x2_c64;
+
+    pf->copy_16x16_unaligned = mc_copy_w16_c64;
+    pf->copy[PIXEL_16x16] = mc_copy_w16_c64;
+    pf->copy[PIXEL_8x8]   = mc_copy_w8_c64;
+    pf->copy[PIXEL_4x4]   = mc_copy_w4_c64;
 
     pf->hpel_filter = hpel_filter_c64;
 }

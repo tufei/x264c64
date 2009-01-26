@@ -36,6 +36,7 @@
     DECL_PIXELS(int, name, suffix, (uint8_t *, int, uint8_t *, int))
 
 DECL_X1(sad, c64)
+DECL_X1(satd, c64)
 
 #undef DECL_PIXELS
 #undef DECL_X1

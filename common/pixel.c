@@ -445,6 +445,16 @@ SATD_X_DECL7( _ssse3 )
 SATD_X_DECL6( _ssse3_phadd )
 #endif
 
+#ifdef _TMS320C6400
+SATD_X( 16x16, _c64 )
+SATD_X( 16x8, _c64 )
+SATD_X( 8x16, _c64 )
+SATD_X( 8x8, _c64 )
+SATD_X( 8x4, _c64 )
+SATD_X( 4x8, _c64 )
+SATD_X( 4x4, _c64 )
+#endif /* _TMS320C6400 */
+
 /****************************************************************************
  * structural similarity metric
  ****************************************************************************/
@@ -806,9 +816,12 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
 #endif
 
 #ifdef _TMS320C6400
-    INIT7(sad, _c64);
-    INIT7(sad_x3, _c64);
-    INIT7(sad_x4, _c64);
+    INIT7( sad, _c64 );
+    INIT7( sad_x3, _c64 );
+    INIT7( sad_x4, _c64 );
+    INIT7( satd, _c64 );
+    INIT7( satd_x3, _c64 );
+    INIT7( satd_x4, _c64 );
 #endif /* _TMS320C6400 */
 
     pixf->ads[PIXEL_8x16] =
