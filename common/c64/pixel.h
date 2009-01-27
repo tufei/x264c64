@@ -37,6 +37,7 @@
 
 DECL_X1(sad, c64)
 DECL_X1(satd, c64)
+DECL_X1(ssd, c64)
 
 #undef DECL_PIXELS
 #undef DECL_X1

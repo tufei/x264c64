@@ -21,6 +21,7 @@
  *****************************************************************************/
 
 #include "common.h"
+#include "timer.h"
 
 /***********************************************************************
  * SAD routines
@@ -53,6 +54,37 @@ PIXEL_SAD_C64(x264_pixel_sad_8x8_c64,    8,  8)
 PIXEL_SAD_C64(x264_pixel_sad_8x4_c64,    8,  4)
 PIXEL_SAD_C64(x264_pixel_sad_4x8_c64,    4,  8)
 PIXEL_SAD_C64(x264_pixel_sad_4x4_c64,    4,  4)
+
+/****************************************************************************
+ * pixel_ssd_WxH
+ ****************************************************************************/
+#define PIXEL_SSD_C64( name, lx, ly ) \
+int name( uint8_t *pix1, int i_stride_pix1,                                 \
+          uint8_t *pix2, int i_stride_pix2 )                                \
+{                                                                           \
+    int i_sum = 0;                                                          \
+    int x, y;                                                               \
+    uint32_t pack4;                                                         \
+    for( y = 0; y < ly; y++ )                                               \
+    {                                                                       \
+        for( x = 0; x < lx; x += 4 )                                        \
+        {                                                                   \
+            pack4 = _subabs4(_mem4_const(&pix1[x]), _mem4_const(&pix2[x])); \
+            i_sum += _dotpu4(pack4, pack4);                                 \
+        }                                                                   \
+        pix1 += i_stride_pix1;                                              \
+        pix2 += i_stride_pix2;                                              \
+    }                                                                       \
+    return i_sum;                                                           \
+}
+
+PIXEL_SSD_C64( x264_pixel_ssd_16x16_c64, 16, 16 )
+PIXEL_SSD_C64( x264_pixel_ssd_16x8_c64,  16,  8 )
+PIXEL_SSD_C64( x264_pixel_ssd_8x16_c64,   8, 16 )
+PIXEL_SSD_C64( x264_pixel_ssd_8x8_c64,    8,  8 )
+PIXEL_SSD_C64( x264_pixel_ssd_8x4_c64,    8,  4 )
+PIXEL_SSD_C64( x264_pixel_ssd_4x8_c64,    4,  8 )
+PIXEL_SSD_C64( x264_pixel_ssd_4x4_c64,    4,  4 )
 
 /* 0x01 = '+', 0xFF = '-' */
 static const uint32_t sign_table[16] = 

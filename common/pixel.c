@@ -34,6 +34,7 @@
 #endif
 #ifdef _TMS320C6400
 #   include "c64/pixel.h"
+#   include "c64/timer.h"
 #endif
 
 
@@ -822,6 +823,7 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
     INIT7( satd, _c64 );
     INIT7( satd_x3, _c64 );
     INIT7( satd_x4, _c64 );
+    INIT7( ssd, _c64 );
 #endif /* _TMS320C6400 */
 
     pixf->ads[PIXEL_8x16] =
