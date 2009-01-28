@@ -31,7 +31,6 @@
 #endif
 #ifdef _TMS320C6400
 #include "c64/mc.h"
-#include "c64/timer.h"
 #endif
 
 static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,

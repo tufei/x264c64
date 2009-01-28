@@ -42,5 +42,8 @@ DECL_X1(ssd, c64)
 #undef DECL_PIXELS
 #undef DECL_X1
 
+int x264_pixel_var_16x16_c64( uint8_t *pix, int i_stride );
+int x264_pixel_var_8x8_c64( uint8_t *pix, int i_stride );
+
 #endif /* X264_C64_PIXEL_H */
 

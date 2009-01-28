@@ -22,7 +22,6 @@
 
 #include "common.h"
 #include "mc.h"
-#include "timer.h"
 
 static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,
                               uint8_t *src1, int i_src1_stride,

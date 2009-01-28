@@ -21,7 +21,6 @@
  *****************************************************************************/
 
 #include "common.h"
-#include "timer.h"
 
 /***********************************************************************
  * SAD routines
@@ -167,4 +166,32 @@ PIXEL_SATD_C64( x264_pixel_satd_8x8_c64,    8,  8 )
 PIXEL_SATD_C64( x264_pixel_satd_8x4_c64,    8,  4 )
 PIXEL_SATD_C64( x264_pixel_satd_4x8_c64,    4,  8 )
 PIXEL_SATD_C64( x264_pixel_satd_4x4_c64,    4,  4 )
+
+/****************************************************************************
+ * pixel_var_wxh
+ ****************************************************************************/
+#define PIXEL_VAR_C64( name, w, shift ) \
+int name( uint8_t *pix, int i_stride )                      \
+{                                                           \
+    uint32_t var = 0, sum = 0, sqr = 0;                     \
+    const uint32_t unit = 0x01010101U;                      \
+    int x, y;                                               \
+    c64_timer_go();                                         \
+    for( y = 0; y < w; y++ )                                \
+    {                                                       \
+        for( x = 0; x < w; x +=4 )                          \
+        {                                                   \
+            uint32_t data = _mem4_const(&pix[x]);           \
+            sum += _dotpu4(data, unit);                     \
+            sqr += _dotpu4(data, data);                     \
+        }                                                   \
+        pix += i_stride;                                    \
+    }                                                       \
+    var = sqr - (sum * sum >> shift);                       \
+    c64_timer_hold();                                       \
+    return var;                                             \
+}
+
+PIXEL_VAR_C64( x264_pixel_var_16x16_c64, 16, 8 )
+PIXEL_VAR_C64( x264_pixel_var_8x8_c64,    8, 6 )
 
