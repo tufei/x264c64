@@ -179,11 +179,19 @@ void x264_mb_encode_i4x4( x264_t *h, int idx, int i_qp )
 }
 #endif /* _TMS320C6400 */
 
+#ifdef _TMS320C6400
+#define STORE_8x8_NNZ(idx,nz)\
+{\
+    _mem2(&h->mb.cache.non_zero_count[x264_scan8[idx*4+0]]) = nz * 0x0101;\
+    _mem2(&h->mb.cache.non_zero_count[x264_scan8[idx*4+2]]) = nz * 0x0101;\
+}
+#else
 #define STORE_8x8_NNZ(idx,nz)\
 {\
     *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[idx*4+0]] = nz * 0x0101;\
     *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[idx*4+2]] = nz * 0x0101;\
 }
+#endif /* _TMS320C6400 */
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct8x8_0, 16);
@@ -415,7 +423,7 @@ static int16_t dct4x4_2[4][4][4];
 
 void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 {
-    int i, ch, nz;
+    int i, ch, nz, nz_dc;
     int b_decimate = b_inter && (h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate);
     h->mb.i_cbp_chroma = 0;
 
@@ -425,9 +433,6 @@ void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
         uint8_t  *p_dst = h->mb.pic.p_fdec[1+ch];
         int i_decimate_score = 0;
         int nz_ac = 0;
-
-        DECLARE_ALIGNED_16( int16_t dct2x2_0[2][2]  );
-        DECLARE_ALIGNED_16( int16_t dct4x4_2[4][4][4] );
 
         if( h->mb.b_lossless )
         {
@@ -508,7 +513,7 @@ void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 #else
 void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 {
-    int i, ch, nz;
+    int i, ch, nz, nz_dc;
     int b_decimate = b_inter && (h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate);
     h->mb.i_cbp_chroma = 0;
 
@@ -780,10 +785,10 @@ void x264_macroblock_encode( x264_t *h )
         if( h->mb.i_skip_intra )
         {
             h->mc.copy[PIXEL_16x16]( h->mb.pic.p_fdec[0], FDEC_STRIDE, h->mb.pic.i8x8_fdec_buf, 16, 16 );
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 0]] = h->mb.pic.i8x8_nnz_buf[0];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 2]] = h->mb.pic.i8x8_nnz_buf[1];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 8]] = h->mb.pic.i8x8_nnz_buf[2];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[10]] = h->mb.pic.i8x8_nnz_buf[3];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = h->mb.pic.i8x8_nnz_buf[0];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = h->mb.pic.i8x8_nnz_buf[1];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = h->mb.pic.i8x8_nnz_buf[2];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = h->mb.pic.i8x8_nnz_buf[3];
             h->mb.i_cbp_luma = h->mb.pic.i8x8_cbp;
             /* In RD mode, restore the now-overwritten DCT data. */
             if( h->mb.i_skip_intra == 2 )
@@ -810,10 +815,10 @@ void x264_macroblock_encode( x264_t *h )
         if( h->mb.i_skip_intra )
         {
             h->mc.copy[PIXEL_16x16]( h->mb.pic.p_fdec[0], FDEC_STRIDE, h->mb.pic.i4x4_fdec_buf, 16, 16 );
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 0]] = h->mb.pic.i4x4_nnz_buf[0];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 2]] = h->mb.pic.i4x4_nnz_buf[1];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 8]] = h->mb.pic.i4x4_nnz_buf[2];
-            *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[10]] = h->mb.pic.i4x4_nnz_buf[3];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = h->mb.pic.i4x4_nnz_buf[0];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = h->mb.pic.i4x4_nnz_buf[1];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = h->mb.pic.i4x4_nnz_buf[2];
+            _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = h->mb.pic.i4x4_nnz_buf[3];
             h->mb.i_cbp_luma = h->mb.pic.i4x4_cbp;
             /* In RD mode, restore the now-overwritten DCT data. */
             if( h->mb.i_skip_intra == 2 )
@@ -826,7 +831,7 @@ void x264_macroblock_encode( x264_t *h )
 
             if( (h->mb.i_neighbour4[i] & (MB_TOPRIGHT|MB_TOP)) == MB_TOP )
                 /* emulate missing topright samples */
-                *(uint32_t*) &p_dst[4-FDEC_STRIDE] = p_dst[3-FDEC_STRIDE] * 0x01010101U;
+                _mem4(&p_dst[4-FDEC_STRIDE]) = p_dst[3-FDEC_STRIDE] * 0x01010101U;
 
             if( h->mb.b_lossless )
                 x264_predict_lossless_4x4( h, p_dst, i, i_mode );
@@ -899,10 +904,10 @@ void x264_macroblock_encode( x264_t *h )
             if( i_decimate_mb < 6 && b_decimate )
             {
                 h->mb.i_cbp_luma = 0;
-                *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 0]] = 0;
-                *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 2]] = 0;
-                *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 8]] = 0;
-                *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[10]] = 0;
+                _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = 0;
+                _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = 0;
+                _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = 0;
+                _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = 0;
             }
             else
             {
@@ -970,10 +975,10 @@ void x264_macroblock_encode( x264_t *h )
                 if( i_decimate_mb < 6 )
                 {
                     h->mb.i_cbp_luma = 0;
-                    *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 0]] = 0;
-                    *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 2]] = 0;
-                    *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[ 8]] = 0;
-                    *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[10]] = 0;
+                    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = 0;
+                    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = 0;
+                    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = 0;
+                    _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = 0;
                 }
                 else
                 {
@@ -1018,7 +1023,7 @@ void x264_macroblock_encode( x264_t *h )
     {
         if( h->mb.i_type == P_L0 && h->mb.i_partition == D_16x16 &&
             !(h->mb.i_cbp_luma | h->mb.i_cbp_chroma) &&
-            *(uint32_t*)h->mb.cache.mv[0][x264_scan8[0]] == *(uint32_t*)h->mb.cache.pskip_mv
+            _mem4(h->mb.cache.mv[0][x264_scan8[0]]) == _mem4_const(h->mb.cache.pskip_mv)
             && h->mb.cache.ref[0][x264_scan8[0]] == 0 )
         {
             h->mb.i_type = P_SKIP;
@@ -1394,8 +1399,7 @@ int x264_macroblock_probe_skip( x264_t *h, int b_bidir )
         /* encode one 4x4 block */
         for( i4x4 = 0; i4x4 < 4; i4x4++ )
         {
-            h->quantf.quant_4x4( dct4x4_4[i4x4], h->quant4_mf[CQM_4PY][i_qp], h->quant4_bias[CQM_4PY][i_qp] );
-            if( !array_non_zero(dct4x4_4[i4x4]) )
+            if( !h->quantf.quant_4x4( dct4x4_4[i4x4], h->quant4_mf[CQM_4PY][i_qp], h->quant4_bias[CQM_4PY][i_qp] ) )
                 continue;
             h->zigzagf.scan_4x4( dctscan, dct4x4_4[i4x4] );
             i_decimate_mb += h->quantf.decimate_score16( dctscan );
@@ -1429,15 +1433,13 @@ int x264_macroblock_probe_skip( x264_t *h, int b_bidir )
 
         /* calculate dct DC */
         dct2x2dc( dct2x2_1, dct4x4_4 );
-        h->quantf.quant_2x2_dc( dct2x2_1, h->quant4_mf[CQM_4PC][i_qp][0]>>1, h->quant4_bias[CQM_4PC][i_qp][0]<<1 );
-        if( array_non_zero(dct2x2_1) )
+        if( h->quantf.quant_2x2_dc( dct2x2_1, h->quant4_mf[CQM_4PC][i_qp][0]>>1, h->quant4_bias[CQM_4PC][i_qp][0]<<1 ) )
             return 0;
 
         /* calculate dct coeffs */
         for( i4x4 = 0, i_decimate_mb = 0; i4x4 < 4; i4x4++ )
         {
-            h->quantf.quant_4x4( dct4x4_4[i4x4], h->quant4_mf[CQM_4PC][i_qp], h->quant4_bias[CQM_4PC][i_qp] );
-            if( !array_non_zero(dct4x4_4[i4x4]) )
+            if( !h->quantf.quant_4x4( dct4x4_4[i4x4], h->quant4_mf[CQM_4PC][i_qp], h->quant4_bias[CQM_4PC][i_qp] ) )
                 continue;
             h->zigzagf.scan_4x4( dctscan, dct4x4_4[i4x4] );
             i_decimate_mb += h->quantf.decimate_score15( dctscan );
@@ -1586,7 +1588,7 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
     uint8_t *p_fdec = h->mb.pic.p_fdec[0] + (i8&1)*8 + (i8>>1)*8*FDEC_STRIDE;
     int b_decimate = h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate;
     int nnz8x8 = 0;
-    int ch;
+    int ch, nz;
 
     x264_mb_mc_8x8( h, i8 );
 
@@ -1597,8 +1599,7 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
         {
             h->zigzagf.sub_8x8( h->dct.luma8x8[i8], p_fenc, p_fdec );
             nnz8x8 = array_non_zero( h->dct.luma8x8[i8] );
-            _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+0]]) = 0x0101 * nnz8x8;
-            _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0x0101 * nnz8x8;
+            STORE_8x8_NNZ(i8,nnz8x8);
         }
         else
         {
@@ -1619,75 +1620,60 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
             p_fdec = h->mb.pic.p_fdec[1+ch] + (i8&1)*4 + (i8>>1)*4*FDEC_STRIDE;
             h->zigzagf.sub_4x4( h->dct.luma4x4[16+i8+ch*4], p_fenc, p_fdec );
             h->dct.luma4x4[16+i8+ch*4][0] = 0;
+            h->mb.cache.non_zero_count[x264_scan8[16+i8+ch*4]] = array_non_zero( h->dct.luma4x4[16+i8+ch*4] );
         }
-        h->mb.cache.non_zero_count[x264_scan8[16+i8]] = array_non_zero( h->dct.luma4x4[16+i8] );
-        h->mb.cache.non_zero_count[x264_scan8[20+i8]] = array_non_zero( h->dct.luma4x4[20+i8] );
     }
     else
     {
         if( h->mb.b_transform_8x8 )
         {
             h->dctf.sub8x8_dct8( dct8x8_2, p_fenc, p_fdec );
-            x264_quant_8x8( h, dct8x8_2, i_qp, 0, i8 );
-            h->zigzagf.scan_8x8( h->dct.luma8x8[i8], dct8x8_2 );
-
-            if( b_decimate && !h->mb.b_trellis )
-                nnz8x8 = 4 <= h->quantf.decimate_score64( h->dct.luma8x8[i8] );
-            else
-                nnz8x8 = array_non_zero( dct8x8_2 );
-
+            nnz8x8 = x264_quant_8x8( h, dct8x8_2, i_qp, 0, i8 );
             if( nnz8x8 )
             {
-                h->quantf.dequant_8x8( dct8x8_2, h->dequant8_mf[CQM_8PY], i_qp );
-                h->dctf.add8x8_idct8( p_fdec, dct8x8_2 );
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+0]]) = 0x0101;
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0x0101;
+                h->zigzagf.scan_8x8( h->dct.luma8x8[i8], dct8x8_2 );
+
+                if( b_decimate && !h->mb.b_trellis )
+                    nnz8x8 = 4 <= h->quantf.decimate_score64( h->dct.luma8x8[i8] );
+
+                if( nnz8x8 )
+                {
+                    h->quantf.dequant_8x8( dct8x8_2, h->dequant8_mf[CQM_8PY], i_qp );
+                    h->dctf.add8x8_idct8( p_fdec, dct8x8_2 );
+                    STORE_8x8_NNZ(i8,1);
+                }
+                else
+                    STORE_8x8_NNZ(i8,0);
             }
             else
-            {
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+0]]) = 0;
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0;
-            }
+                STORE_8x8_NNZ(i8,0);
         }
         else
         {
             int i4;
+            int i_decimate_8x8 = 0;
             h->dctf.sub8x8_dct( dct4x4_5, p_fenc, p_fdec );
             for( i4 = 0; i4 < 4; i4++ )
-                x264_quant_4x4( h, dct4x4_5[i4], i_qp, DCT_LUMA_4x4, 0, i8*4+i4 );
-
-            for( i4 = 0; i4 < 4; i4++ )
-                h->zigzagf.scan_4x4( h->dct.luma4x4[i8*4+i4], dct4x4_5[i4] );
-
-            if( b_decimate )
             {
-                int i_decimate_8x8 = 0;
-                for( i4 = 0; i4 < 4 && i_decimate_8x8 < 4; i4++ )
-                    i_decimate_8x8 += h->quantf.decimate_score16( h->dct.luma4x4[i8*4+i4] );
-                nnz8x8 = 4 <= i_decimate_8x8;
+                nz = x264_quant_4x4( h, dct4x4_5[i4], i_qp, DCT_LUMA_4x4, 0, i8*4+i4 );
+                h->mb.cache.non_zero_count[x264_scan8[i8*4+i4]] = nz;
+                if( nz )
+                {
+                    h->zigzagf.scan_4x4( h->dct.luma4x4[i8*4+i4], dct4x4_5[i4] );
+                    h->quantf.dequant_4x4( dct4x4_5[i4], h->dequant4_mf[CQM_4PY], i_qp );
+                    if( b_decimate )
+                        i_decimate_8x8 += h->quantf.decimate_score16( h->dct.luma4x4[i8*4+i4] );
+                    nnz8x8 = 1;
+                }
             }
-            else
-                nnz8x8 = array_non_zero( dct4x4_5 );
+
+            if( b_decimate && i_decimate_8x8 < 4 )
+                nnz8x8 = 0;
 
             if( nnz8x8 )
-            {
-                for( i4 = 0; i4 < 4; i4++ )
-                {
-                    if( array_non_zero( dct4x4_5[i4] ) )
-                    {
-                        h->quantf.dequant_4x4( dct4x4_5[i4], h->dequant4_mf[CQM_4PY], i_qp );
-                        h->mb.cache.non_zero_count[x264_scan8[i8*4+i4]] = 1;
-                    }
-                    else
-                        h->mb.cache.non_zero_count[x264_scan8[i8*4+i4]] = 0;
-                }
                 h->dctf.add8x8_idct( p_fdec, dct4x4_5 );
-            }
             else
-            {
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+0]]) = 0;
-                _mem2(&h->mb.cache.non_zero_count[x264_scan8[i8*4+2]]) = 0;
-            }
+                STORE_8x8_NNZ(i8,0);
         }
 
         i_qp = h->mb.i_chroma_qp;
@@ -1701,19 +1687,17 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
             dct4x4_6[0][0] = 0;
 
             if( h->mb.b_trellis )
-                x264_quant_4x4_trellis( h, dct4x4_6, CQM_4PC, i_qp, DCT_CHROMA_AC, 0, 0 );
+                nz = x264_quant_4x4_trellis( h, dct4x4_6, CQM_4PC, i_qp, DCT_CHROMA_AC, 0, 0 );
             else
-                h->quantf.quant_4x4( dct4x4_6, h->quant4_mf[CQM_4PC][i_qp], h->quant4_bias[CQM_4PC][i_qp] );
+                nz = h->quantf.quant_4x4( dct4x4_6, h->quant4_mf[CQM_4PC][i_qp], h->quant4_bias[CQM_4PC][i_qp] );
 
-            if( array_non_zero( dct4x4_6 ) )
+            h->mb.cache.non_zero_count[x264_scan8[16+i8+ch*4]] = nz;
+            if( nz )
             {
                 h->zigzagf.scan_4x4( h->dct.luma4x4[16+i8+ch*4], dct4x4_6 );
                 h->quantf.dequant_4x4( dct4x4_6, h->dequant4_mf[CQM_4PC], i_qp );
                 h->dctf.add4x4_idct( p_fdec, dct4x4_6 );
-                h->mb.cache.non_zero_count[x264_scan8[16+i8+ch*4]] = 1;
             }
-            else
-                h->mb.cache.non_zero_count[x264_scan8[16+i8+ch*4]] = 0;
         }
     }
     h->mb.i_cbp_luma &= ~(1 << i8);

@@ -498,8 +498,13 @@ struct x264_t
             uint8_t i8x8_fdec_buf[16*16];
             int16_t i8x8_dct_buf[3][64];
             int16_t i4x4_dct_buf[15][16];
+            uint32_t i4x4_nnz_buf[4];
+            uint32_t i8x8_nnz_buf[4];
+            int i4x4_cbp;
+            int i8x8_cbp;
 
             /* Psy trellis DCT data */
+            uint32_t dummy1[2]; /* alignment */
             int16_t fenc_dct8[4][64];
             int16_t fenc_dct4[16][16];
 #else
