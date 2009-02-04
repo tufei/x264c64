@@ -1168,8 +1168,13 @@ static void x264_intra_rd_refine( x264_t *h, x264_mb_analysis_t *a )
                     if( !(idx&1) )
                         for( j=0; j<7; j++ )
                             pels_v[j] = p_dst_by[7+j*FDEC_STRIDE];
+#ifdef _TMS320C6400
+                    i_nnz[0] = _mem2_const(&h->mb.cache.non_zero_count[x264_scan8[4*idx+0]]);
+                    i_nnz[1] = _mem2_const(&h->mb.cache.non_zero_count[x264_scan8[4*idx+2]]);
+#else
                     i_nnz[0] = *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[4*idx+0]];
                     i_nnz[1] = *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[4*idx+2]];
+#endif
                 }
             }
 
@@ -1182,8 +1187,13 @@ static void x264_intra_rd_refine( x264_t *h, x264_mb_analysis_t *a )
             if( !(idx&1) )
                 for( j=0; j<7; j++ )
                     p_dst_by[7+j*FDEC_STRIDE] = pels_v[j];
+#ifdef _TMS320C6400
+            _mem2(&h->mb.cache.non_zero_count[x264_scan8[4*idx+0]]) = i_nnz[0];
+            _mem2(&h->mb.cache.non_zero_count[x264_scan8[4*idx+2]]) = i_nnz[1];
+#else
             *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[4*idx+0]] = i_nnz[0];
             *(uint16_t*)&h->mb.cache.non_zero_count[x264_scan8[4*idx+2]] = i_nnz[1];
+#endif
 
             x264_macroblock_cache_intra8x8_pred( h, 2*x, 2*y, a->i_predict8x8[idx] );
         }
