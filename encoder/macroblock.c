@@ -275,6 +275,8 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
     uint8_t  *p_dst = h->mb.pic.p_fdec[0];
 
     int i, nz;
+    int b_decimate = h->sh.i_type == SLICE_TYPE_B || (h->param.analyse.b_dct_decimate && h->sh.i_type == SLICE_TYPE_P);
+    int decimate_score = b_decimate ? 0 : 9;
 
     if( h->mb.b_lossless )
     {
@@ -310,8 +312,20 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
         {
             h->zigzagf.scan_4x4( h->dct.luma4x4[i], dct4x4_1[i] );
             h->quantf.dequant_4x4( dct4x4_1[i], h->dequant4_mf[CQM_4IY], i_qp );
+            if( decimate_score < 6 ) decimate_score += h->quantf.decimate_score15( h->dct.luma4x4[i] );
             h->mb.i_cbp_luma = 0xf;
         }
+    }
+
+    /* Writing the 16 CBFs in an i16x16 block is quite costly, so decimation can save many bits. */
+    /* More useful with CAVLC, but still useful with CABAC. */
+    if( decimate_score < 6 )
+    {
+        h->mb.i_cbp_luma = 0;
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = 0;
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = 0;
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = 0;
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = 0;
     }
 
     h->dctf.dct4x4dc( dct_dc4x4 );
