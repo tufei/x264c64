@@ -101,6 +101,8 @@ const char *main_arguments[] =
     "--bitrate", "400",
     "-b", "2",
     "-w",
+    "-r", "2",
+    "--mixed-refs",
     "-o", "suzie.264",
     "C:\\CCStudio_v3.1\\suzie_qcif.y4m"
 };
