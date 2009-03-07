@@ -661,6 +661,9 @@ static int scenecut( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, in
     x264_frame_t *frame = frames[p1];
     x264_slicetype_frame_cost( h, a, frames, p0, p1, p1, 0 );
 
+#ifdef _TMS320C6400
+    {
+#endif
     int icost = frame->i_cost_est[0][0];
     int pcost = frame->i_cost_est[p1-p0][0];
     float f_bias;
@@ -696,6 +699,9 @@ static int scenecut( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, in
                   f_bias, i_gop_size, imb, pmb );
     }
     return res;
+#ifdef _TMS320C6400
+    }
+#endif
 }
 
 static void x264_slicetype_analyse( x264_t *h )
