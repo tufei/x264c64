@@ -386,68 +386,125 @@ cglobal x264_pixel_var_8x8_sse2, 2,4,8
     jg .loop
     VAR_END 6
 
+%macro VAR2_END 0
+    HADDW   m5, m7
+    movd   r1d, m5
+    imul   r1d, r1d
+    HADDD   m6, m1
+    shr    r1d, 6
+    movd   eax, m6
+    mov   [r4], eax
+    sub    eax, r1d  ; sqr - (sum * sum >> shift)
+    RET
+%endmacro
+
+;-----------------------------------------------------------------------------
+; int x264_pixel_var2_8x8_mmxext( uint8_t *, int, uint8_t *, int, int * )
+;-----------------------------------------------------------------------------
+%ifndef ARCH_X86_64
+INIT_MMX
+cglobal x264_pixel_var2_8x8_mmxext, 5,6
+    VAR_START 0
+    mov      r5d, 8
+.loop:
+    movq      m0, [r0]
+    movq      m1, m0
+    movq      m4, m0
+    movq      m2, [r2]
+    movq      m3, m2
+    punpcklbw m0, m7
+    punpckhbw m1, m7
+    punpcklbw m2, m7
+    punpckhbw m3, m7
+    psubw     m0, m2
+    psubw     m1, m3
+    paddw     m5, m0
+    paddw     m5, m1
+    pmaddwd   m0, m0
+    pmaddwd   m1, m1
+    paddd     m6, m0
+    paddd     m6, m1
+    add       r0, r1
+    add       r2, r3
+    dec       r5d
+    jg .loop
+    VAR2_END
+    RET
+%endif
+
+INIT_XMM
+cglobal x264_pixel_var2_8x8_sse2, 5,6,8
+    VAR_START 1
+    mov      r5d, 4
+.loop:
+    movq      m1, [r0]
+    movhps    m1, [r0+r1]
+    movq      m3, [r2]
+    movhps    m3, [r2+r3]
+    DEINTB    0, 1, 2, 3, 7
+    psubw     m0, m2
+    psubw     m1, m3
+    paddw     m5, m0
+    paddw     m5, m1
+    pmaddwd   m0, m0
+    pmaddwd   m1, m1
+    paddd     m6, m0
+    paddd     m6, m1
+    lea       r0, [r0+r1*2]
+    lea       r2, [r2+r3*2]
+    dec      r5d
+    jg .loop
+    VAR2_END
+    RET
+
+cglobal x264_pixel_var2_8x8_ssse3, 5,6,8
+    pxor      m5, m5    ; sum
+    pxor      m6, m6    ; sum squared
+    mova      m7, [hsub_mul GLOBAL]
+    mov      r5d, 2
+.loop:
+    movq      m0, [r0]
+    movq      m2, [r2]
+    movq      m1, [r0+r1]
+    movq      m3, [r2+r3]
+    lea       r0, [r0+r1*2]
+    lea       r2, [r2+r3*2]
+    punpcklbw m0, m2
+    punpcklbw m1, m3
+    movq      m2, [r0]
+    movq      m3, [r2]
+    punpcklbw m2, m3
+    movq      m3, [r0+r1]
+    movq      m4, [r2+r3]
+    punpcklbw m3, m4
+    pmaddubsw m0, m7
+    pmaddubsw m1, m7
+    pmaddubsw m2, m7
+    pmaddubsw m3, m7
+    paddw     m5, m0
+    paddw     m5, m1
+    paddw     m5, m2
+    paddw     m5, m3
+    pmaddwd   m0, m0
+    pmaddwd   m1, m1
+    pmaddwd   m2, m2
+    pmaddwd   m3, m3
+    paddd     m6, m0
+    paddd     m6, m1
+    paddd     m6, m2
+    paddd     m6, m3
+    lea       r0, [r0+r1*2]
+    lea       r2, [r2+r3*2]
+    dec      r5d
+    jg .loop
+    VAR2_END
+    RET
 
 ;=============================================================================
 ; SATD
 ;=============================================================================
 
-%macro TRANS_SSE2 5-6
-; TRANSPOSE2x2
-; %1: transpose width (d/q) - use SBUTTERFLY qdq for dq
-; %2: ord/unord (for compat with sse4, unused)
-; %3/%4: source regs
-; %5/%6: tmp regs
-%ifidn %1, d
-%define mask [mask_10 GLOBAL]
-%define shift 16
-%elifidn %1, q
-%define mask [mask_1100 GLOBAL]
-%define shift 32
-%endif
-%if %0==6 ; less dependency if we have two tmp
-    mova   m%5, mask   ; ff00
-    mova   m%6, m%4    ; x5x4
-    psll%1 m%4, shift  ; x4..
-    pand   m%6, m%5    ; x5..
-    pandn  m%5, m%3    ; ..x0
-    psrl%1 m%3, shift  ; ..x1
-    por    m%4, m%5    ; x4x0
-    por    m%3, m%6    ; x5x1
-%else ; more dependency, one insn less. sometimes faster, sometimes not
-    mova   m%5, m%4    ; x5x4
-    psll%1 m%4, shift  ; x4..
-    pxor   m%4, m%3    ; (x4^x1)x0
-    pand   m%4, mask   ; (x4^x1)..
-    pxor   m%3, m%4    ; x4x0
-    psrl%1 m%4, shift  ; ..(x1^x4)
-    pxor   m%5, m%4    ; x5x1
-    SWAP   %4, %3, %5
-%endif
-%endmacro
-
 %define TRANS TRANS_SSE2
-
-%macro TRANS_SSE4 5-6 ; see above
-%ifidn %1, d
-%define mask 10101010b
-%define shift 16
-%elifidn %1, q
-%define mask 11001100b
-%define shift 32
-%endif
-    mova   m%5, m%3
-%ifidn %2, ord
-    psrl%1 m%3, shift
-%endif
-    pblendw m%3, m%4, mask
-    psll%1 m%4, shift
-%ifidn %2, ord
-    pblendw m%4, m%5, 255^mask
-%else
-    psrl%1 m%5, shift
-    por    m%4, m%5
-%endif
-%endmacro
 
 %macro JDUP_SSE2 2
     punpckldq %1, %2
@@ -1923,29 +1980,43 @@ HADAMARD_AC_SSE2 sse4
 ; void x264_pixel_ssim_4x4x2_core_sse2( const uint8_t *pix1, int stride1,
 ;                                       const uint8_t *pix2, int stride2, int sums[2][4] )
 ;-----------------------------------------------------------------------------
-cglobal x264_pixel_ssim_4x4x2_core_sse2, 4,4,8
-    pxor      m0, m0
-    pxor      m1, m1
-    pxor      m2, m2
-    pxor      m3, m3
-    pxor      m4, m4
-%rep 4
-    movq      m5, [r0]
-    movq      m6, [r2]
+
+%macro SSIM_ITER 1
+    movq      m5, [r0+(%1&1)*r1]
+    movq      m6, [r2+(%1&1)*r3]
     punpcklbw m5, m0
     punpcklbw m6, m0
+%if %1==1
+    lea       r0, [r0+r1*2]
+    lea       r2, [r2+r3*2]
+%endif
+%if %1==0
+    movdqa    m1, m5
+    movdqa    m2, m6
+%else
     paddw     m1, m5
     paddw     m2, m6
+%endif
     movdqa    m7, m5
     pmaddwd   m5, m5
     pmaddwd   m7, m6
     pmaddwd   m6, m6
+%if %1==0
+    SWAP      m3, m5
+    SWAP      m4, m7
+%else
     paddd     m3, m5
     paddd     m4, m7
+%endif
     paddd     m3, m6
-    add       r0, r1
-    add       r2, r3
-%endrep
+%endmacro
+
+cglobal x264_pixel_ssim_4x4x2_core_sse2, 4,4,8
+    pxor      m0, m0
+    SSIM_ITER 0
+    SSIM_ITER 1
+    SSIM_ITER 2
+    SSIM_ITER 3
     ; PHADDW m1, m2
     ; PHADDD m3, m4
     movdqa    m7, [pw_1 GLOBAL]
@@ -1971,8 +2042,7 @@ cglobal x264_pixel_ssim_4x4x2_core_sse2, 4,4,8
 
     movq      [t0+ 0], m1
     movq      [t0+ 8], m3
-    psrldq    m1, 8
-    movq      [t0+16], m1
+    movhps    [t0+16], m1
     movq      [t0+24], m5
     RET
 

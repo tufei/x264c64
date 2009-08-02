@@ -149,6 +149,15 @@ static inline int x264_predictor_difference( int16_t (*mvc)[2], intptr_t i_mvc )
     return sum;
 }
 
+static inline uint32_t x264_cabac_amvd_sum( int16_t *mvdleft, int16_t *mvdtop )
+{
+    int amvd0 = abs(mvdleft[0]) + abs(mvdtop[0]);
+    int amvd1 = abs(mvdleft[1]) + abs(mvdtop[1]);
+    amvd0 = (amvd0 > 2) + (amvd0 > 32);
+    amvd1 = (amvd1 > 2) + (amvd1 > 32);
+    return amvd0 + (amvd1<<16);
+}
+
 /****************************************************************************
  *
  ****************************************************************************/
@@ -606,6 +615,11 @@ struct x264_t
         int     b_direct_auto_read; /* take stats for --direct auto from the 2pass log */
         int     b_direct_auto_write; /* analyse direct modes, to use and/or save */
 
+        /* lambda values */
+        int     i_trellis_lambda2[2][2]; /* [luma,chroma][inter,intra] */
+        int     i_psy_rd_lambda;
+        int     i_chroma_lambda2_offset;
+
         /* B_direct and weighted prediction */
         int16_t dist_scale_factor[16][2];
         int16_t bipred_weight[32][4];
@@ -637,6 +651,7 @@ struct x264_t
             int i_mb_count_8x8dct[2];
             int i_mb_count_ref[2][32];
             int i_mb_partition[17];
+            int i_mb_cbp[6];
             /* Adaptive direct mv pred */
             int i_direct_score[2];
             /* Metrics */
@@ -663,6 +678,7 @@ struct x264_t
         int64_t i_mb_partition[2][17];
         int64_t i_mb_count_8x8dct[2];
         int64_t i_mb_count_ref[2][2][32];
+        int64_t i_mb_cbp[6];
         /* */
         int     i_direct_score[2];
         int     i_direct_frames[2];

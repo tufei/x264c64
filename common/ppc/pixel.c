@@ -1865,7 +1865,7 @@ static int pixel_sa8d_16x16_altivec( uint8_t *pix1, int i_pix1,
 
 #define VEC_LOAD_HIGH( p, num )                                    \
     vec_u8_t pix8_##num = vec_ld( stride*num, p );                 \
-    vec_s16_t pix16_s##num = vec_perm(pix8_##num, zero_u8v, perm); \
+    vec_s16_t pix16_s##num = (vec_s16_t)vec_perm(pix8_##num, zero_u8v, perm); \
     vec_s16_t pix16_d##num;
 
 static uint64_t pixel_hadamard_ac_altivec( uint8_t *pix, int stride, const vec_u8_t perm )
@@ -1905,7 +1905,7 @@ static uint64_t pixel_hadamard_ac_altivec( uint8_t *pix, int stride, const vec_u
     vec_u16_t addabs67 = vec_add( VEC_ABSOLUTE(pix16_d6), VEC_ABSOLUTE(pix16_d7) );
 
     vec_u16_t sum4_v = vec_add(vec_add(addabs01, addabs23), vec_add(addabs45, addabs67));
-    vec_ste(vec_sums(vec_sum4s(sum4_v, zero_s32v), zero_s32v), 12, sum4_tab);
+    vec_ste(vec_sums(vec_sum4s((vec_s16_t)sum4_v, zero_s32v), zero_s32v), 12, sum4_tab);
 
     vec_s16_t tmpi0 = vec_add(pix16_d0, pix16_d4);
     vec_s16_t tmpi4 = vec_sub(pix16_d0, pix16_d4);
@@ -1933,7 +1933,7 @@ static uint64_t pixel_hadamard_ac_altivec( uint8_t *pix, int stride, const vec_u
                                   VEC_ABSOLUTE( vec_sub(pix16_d3, pix16_d7) ) );
 
     vec_u16_t sum8_v = vec_add( vec_add(addsum04, addsum15), vec_add(addsum26, addsum37) );
-    vec_ste(vec_sums( vec_sum4s(sum8_v, zero_s32v), zero_s32v), 12, sum8_tab);
+    vec_ste(vec_sums(vec_sum4s((vec_s16_t)sum8_v, zero_s32v), zero_s32v), 12, sum8_tab);
 
     int sum8 = sum8_tab[3];
 

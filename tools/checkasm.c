@@ -354,6 +354,23 @@ static int check_pixel( int cpu_ref, int cpu_new )
     TEST_PIXEL_VAR( PIXEL_8x8 );
     report( "pixel var :" );
 
+    ok = 1; used_asm = 0;
+    if( pixel_asm.var2_8x8 != pixel_ref.var2_8x8 )
+    {
+        int res_c, res_asm, ssd_c, ssd_asm;
+        set_func_name( "var2_8x8" );
+        used_asm = 1;
+        res_c   = call_c( pixel_c.var2_8x8, buf1, 16, buf2, 16, &ssd_c );
+        res_asm = call_a( pixel_asm.var2_8x8, buf1, 16, buf2, 16, &ssd_asm );
+        if( res_c != res_asm || ssd_c != ssd_asm )
+        {
+            ok = 0;
+            fprintf( stderr, "var[%d]: %d != %d or %d != %d [FAILED]\n", i, res_c, res_asm, ssd_c, ssd_asm );
+        }
+    }
+
+    report( "pixel var2 :" );
+
     for( i=0, ok=1, used_asm=0; i<4; i++ )
         if( pixel_asm.hadamard_ac[i] != pixel_ref.hadamard_ac[i] )
         {
@@ -405,13 +422,16 @@ static int check_pixel( int cpu_ref, int cpu_new )
     TEST_INTRA_MBCMP( intra_sa8d_x3_8x8  , predict_8x8  , sa8d[PIXEL_8x8]  , 1, edge );
     report( "intra satd_x3 :" );
     TEST_INTRA_MBCMP( intra_sad_x3_16x16 , predict_16x16, sad [PIXEL_16x16], 0 );
+    TEST_INTRA_MBCMP( intra_sad_x3_8x8c  , predict_8x8c , sad [PIXEL_8x8]  , 0 );
+    TEST_INTRA_MBCMP( intra_sad_x3_8x8   , predict_8x8  , sad [PIXEL_8x8]  , 1, edge );
+    TEST_INTRA_MBCMP( intra_sad_x3_4x4   , predict_4x4  , sad [PIXEL_4x4]  , 0 );
     report( "intra sad_x3 :" );
 
     if( pixel_asm.ssim_4x4x2_core != pixel_ref.ssim_4x4x2_core ||
         pixel_asm.ssim_end4 != pixel_ref.ssim_end4 )
     {
         float res_c, res_a;
-        int sums[5][4] = {{0}};
+        DECLARE_ALIGNED_16( int sums[5][4] ) = {{0}};
         used_asm = ok = 1;
         x264_emms();
         res_c = x264_pixel_ssim_wxh( &pixel_c,   buf1+2, 32, buf2+2, 32, 32, 28, buf3 );
@@ -477,6 +497,7 @@ static int check_dct( int cpu_ref, int cpu_new )
     DECLARE_ALIGNED_16( int16_t dct2[16][4][4] );
     DECLARE_ALIGNED_16( int16_t dct4[16][4][4] );
     DECLARE_ALIGNED_16( int16_t dct8[4][8][8] );
+    DECLARE_ALIGNED_8( int16_t dctdc[2][2][2] );
     x264_t h_buf;
     x264_t *h = &h_buf;
 
@@ -511,6 +532,7 @@ static int check_dct( int cpu_ref, int cpu_new )
     ok = 1; used_asm = 0;
     TEST_DCT( sub4x4_dct, dct1[0], dct2[0], 16*2 );
     TEST_DCT( sub8x8_dct, dct1, dct2, 16*2*4 );
+    TEST_DCT( sub8x8_dct_dc, dctdc[0], dctdc[1], 4*2 );
     TEST_DCT( sub16x16_dct, dct1, dct2, 16*2*16 );
     report( "sub_dct4 :" );
 
@@ -621,19 +643,49 @@ static int check_dct( int cpu_ref, int cpu_new )
 #define TEST_ZIGZAG_SUB( name, t1, t2, size ) \
     if( zigzag_asm.name != zigzag_ref.name ) \
     { \
+        int nz_a, nz_c; \
         set_func_name( "zigzag_"#name"_%s", interlace?"field":"frame" );\
         used_asm = 1; \
         memcpy( buf3, buf1, 16*FDEC_STRIDE ); \
         memcpy( buf4, buf1, 16*FDEC_STRIDE ); \
-        call_c1( zigzag_c.name, t1, buf2, buf3 );  \
-        call_a1( zigzag_asm.name, t2, buf2, buf4 ); \
-        if( memcmp( t1, t2, size*sizeof(int16_t) )|| memcmp( buf3, buf4, 16*FDEC_STRIDE ) )  \
+        nz_c = call_c1( zigzag_c.name, t1, buf2, buf3 );  \
+        nz_a = call_a1( zigzag_asm.name, t2, buf2, buf4 ); \
+        if( memcmp( t1, t2, size*sizeof(int16_t) )|| memcmp( buf3, buf4, 16*FDEC_STRIDE ) || nz_c != nz_a )  \
         { \
             ok = 0; \
             fprintf( stderr, #name " [FAILED]\n" ); \
         } \
         call_c2( zigzag_c.name, t1, buf2, buf3 );  \
         call_a2( zigzag_asm.name, t2, buf2, buf4 ); \
+    }
+
+#define TEST_ZIGZAG_SUBAC( name, t1, t2 ) \
+    if( zigzag_asm.name != zigzag_ref.name ) \
+    { \
+        int nz_a, nz_c; \
+        int16_t dc_a, dc_c; \
+        set_func_name( "zigzag_"#name"_%s", interlace?"field":"frame" );\
+        used_asm = 1; \
+        for( i = 0; i < 2; i++ ) \
+        { \
+            memcpy( buf3, buf2, 16*FDEC_STRIDE ); \
+            memcpy( buf4, buf2, 16*FDEC_STRIDE ); \
+            for( j = 0; j < 4; j++ ) \
+            { \
+                memcpy( buf3 + j*FDEC_STRIDE, (i?buf1:buf2) + j*FENC_STRIDE, 4 ); \
+                memcpy( buf4 + j*FDEC_STRIDE, (i?buf1:buf2) + j*FENC_STRIDE, 4 ); \
+            } \
+            nz_c = call_c1( zigzag_c.name, t1, buf2, buf3, &dc_c );  \
+            nz_a = call_a1( zigzag_asm.name, t2, buf2, buf4, &dc_a ); \
+            if( memcmp( t1+1, t2+1, 15*sizeof(int16_t) ) || memcmp( buf3, buf4, 16*FDEC_STRIDE ) || nz_c != nz_a || dc_c != dc_a )  \
+            { \
+                ok = 0; \
+                fprintf( stderr, #name " [FAILED]\n" ); \
+                break; \
+            } \
+        } \
+        call_c2( zigzag_c.name, t1, buf2, buf3, &dc_c );  \
+        call_a2( zigzag_asm.name, t2, buf2, buf4, &dc_a ); \
     }
 
 #define TEST_INTERLEAVE( name, t1, t2, dct, size )   \
@@ -665,6 +717,7 @@ static int check_dct( int cpu_ref, int cpu_new )
     TEST_ZIGZAG_SCAN( scan_8x8, level1, level2, (void*)dct1, 64 );
     TEST_ZIGZAG_SCAN( scan_4x4, level1, level2, dct1[0], 16  );
     TEST_ZIGZAG_SUB( sub_4x4, level1, level2, 16 );
+    TEST_ZIGZAG_SUBAC( sub_4x4ac, level1, level2 );
     report( "zigzag_frame :" );
 
     interlace = 1;
@@ -676,6 +729,7 @@ static int check_dct( int cpu_ref, int cpu_new )
     TEST_ZIGZAG_SCAN( scan_8x8, level1, level2, (void*)dct1, 64 );
     TEST_ZIGZAG_SCAN( scan_4x4, level1, level2, dct1[0], 16  );
     TEST_ZIGZAG_SUB( sub_4x4, level1, level2, 16 );
+    TEST_ZIGZAG_SUBAC( sub_4x4ac, level1, level2 );
     report( "zigzag_field :" );
 
     ok = 1; used_asm = 0;
@@ -749,8 +803,8 @@ static int check_mc( int cpu_ref, int cpu_new )
             used_asm = 1; \
             memset(buf3, 0xCD, 1024); \
             memset(buf4, 0xCD, 1024); \
-            call_c( mc_c.mc_chroma, dst1, 16, src, 32, dx, dy, w, h ); \
-            call_a( mc_a.mc_chroma, dst2, 16, src, 32, dx, dy, w, h ); \
+            call_c( mc_c.mc_chroma, dst1, 16, src, 64, dx, dy, w, h ); \
+            call_a( mc_a.mc_chroma, dst2, 16, src, 64, dx, dy, w, h ); \
             /* mc_chroma width=2 may write garbage to the right of dst. ignore that. */\
             for( j=0; j<h; j++ ) \
                 for( i=w; i<4; i++ ) \
@@ -780,8 +834,9 @@ static int check_mc( int cpu_ref, int cpu_new )
 
     ok = 1; used_asm = 0;
     for( dy = -1; dy < 9; dy++ )
-        for( dx = -1; dx < 9; dx++ )
+        for( dx = -128; dx < 128; dx++ )
         {
+            if( rand()&15 ) continue;
             MC_TEST_CHROMA( 8, 8 );
             MC_TEST_CHROMA( 8, 4 );
             MC_TEST_CHROMA( 4, 8 );
@@ -852,7 +907,7 @@ static int check_mc( int cpu_ref, int cpu_new )
     if( mc_a.frame_init_lowres_core != mc_ref.frame_init_lowres_core )
     {
         uint8_t *dstc[4] = { buf3, buf3+1024, buf3+2048, buf3+3072 };
-        uint8_t *dsta[4] = { buf4, buf4+1024, buf4+2048, buf3+3072 };
+        uint8_t *dsta[4] = { buf4, buf4+1024, buf4+2048, buf4+3072 };
         set_func_name( "lowres_init" );
         ok = 1; used_asm = 1;
         for( w=40; w<=48; w+=8 )

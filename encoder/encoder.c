@@ -388,6 +388,26 @@ static int x264_validate_parameters( x264_t *h )
         }
     }
 
+    /* Detect default ffmpeg settings and terminate with an error. */
+    {
+        int score = 0;
+        score += h->param.analyse.i_me_range == 0;
+        score += h->param.rc.i_qp_step == 3;
+        score += h->param.i_keyint_max == 12;
+        score += h->param.rc.i_qp_min == 2;
+        score += h->param.rc.i_qp_max == 31;
+        score += h->param.rc.f_qcompress == 0.5;
+        score += fabs(h->param.rc.f_ip_factor - 1.25) < 0.01;
+        score += fabs(h->param.rc.f_pb_factor - 1.25) < 0.01;
+        score += h->param.analyse.inter == 0 && h->param.analyse.i_subpel_refine == 8;
+        if( score >= 5 )
+        {
+            x264_log( h, X264_LOG_ERROR, "broken ffmpeg default settings detected\n" );
+            x264_log( h, X264_LOG_ERROR, "use an encoding preset (vpre)\n" );
+            return -1;
+        }
+    }
+
     if( h->param.rc.i_rc_method < 0 || h->param.rc.i_rc_method > 2 )
     {
         x264_log( h, X264_LOG_ERROR, "no ratecontrol method specified\n" );
@@ -482,7 +502,7 @@ static int x264_validate_parameters( x264_t *h )
     if( h->param.analyse.i_me_method == X264_ME_TESA &&
         (h->mb.b_lossless || h->param.analyse.i_subpel_refine <= 1) )
         h->param.analyse.i_me_method = X264_ME_ESA;
-    h->param.analyse.i_subpel_refine = x264_clip3( h->param.analyse.i_subpel_refine, 0, 9 );
+    h->param.analyse.i_subpel_refine = x264_clip3( h->param.analyse.i_subpel_refine, 0, 10 );
     h->param.analyse.b_mixed_references = h->param.analyse.b_mixed_references && h->param.i_frame_reference > 1;
     h->param.analyse.inter &= X264_ANALYSE_PSUB16x16|X264_ANALYSE_PSUB8x8|X264_ANALYSE_BSUB16x16|
                               X264_ANALYSE_I4x4|X264_ANALYSE_I8x8;
@@ -518,24 +538,26 @@ static int x264_validate_parameters( x264_t *h )
     else
         h->mb.i_psy_trellis = 0;
     h->param.analyse.i_chroma_qp_offset = x264_clip3(h->param.analyse.i_chroma_qp_offset, -12, 12);
-    h->param.rc.i_aq_mode = x264_clip3( h->param.rc.i_aq_mode, 0, 1 );
+    h->param.rc.i_aq_mode = x264_clip3( h->param.rc.i_aq_mode, 0, 2 );
     h->param.rc.f_aq_strength = x264_clip3f( h->param.rc.f_aq_strength, 0, 3 );
     if( h->param.rc.f_aq_strength == 0 )
         h->param.rc.i_aq_mode = 0;
     h->param.analyse.i_noise_reduction = x264_clip3( h->param.analyse.i_noise_reduction, 0, 1<<16 );
+    if( h->param.analyse.i_subpel_refine == 10 && (h->param.analyse.i_trellis != 2 || !h->param.rc.i_aq_mode) )
+        h->param.analyse.i_subpel_refine = 9;
 
     {
         const x264_level_t *l = x264_levels;
         if( h->param.i_level_idc < 0 )
         {
+            int maxrate_bak = h->param.rc.i_vbv_max_bitrate;
             if( h->param.rc.i_rc_method == X264_RC_ABR && h->param.rc.i_vbv_buffer_size <= 0 )
                 h->param.rc.i_vbv_max_bitrate = h->param.rc.i_bitrate * 2;
             h->sps = h->sps_array;
             x264_sps_init( h->sps, h->param.i_sps_id, &h->param );
             do h->param.i_level_idc = l->level_idc;
                 while( l[1].level_idc && x264_validate_levels( h, 0 ) && l++ );
-            if( h->param.rc.i_vbv_buffer_size <= 0 )
-                h->param.rc.i_vbv_max_bitrate = 0;
+            h->param.rc.i_vbv_max_bitrate = maxrate_bak;
         }
         else
         {
@@ -610,6 +632,8 @@ static void mbcmp_init( x264_t *h )
     memcpy( h->pixf.mbcmp, satd ? h->pixf.satd : h->pixf.sad_aligned, sizeof(h->pixf.mbcmp) );
     memcpy( h->pixf.mbcmp_unaligned, satd ? h->pixf.satd : h->pixf.sad, sizeof(h->pixf.mbcmp_unaligned) );
     h->pixf.intra_mbcmp_x3_16x16 = satd ? h->pixf.intra_satd_x3_16x16 : h->pixf.intra_sad_x3_16x16;
+    h->pixf.intra_mbcmp_x3_8x8c = satd ? h->pixf.intra_satd_x3_8x8c : h->pixf.intra_sad_x3_8x8c;
+    h->pixf.intra_mbcmp_x3_4x4 = satd ? h->pixf.intra_satd_x3_4x4 : h->pixf.intra_sad_x3_4x4;
     satd &= h->param.analyse.i_me_method == X264_ME_TESA;
     memcpy( h->pixf.fpelcmp, satd ? h->pixf.satd : h->pixf.sad, sizeof(h->pixf.fpelcmp) );
     memcpy( h->pixf.fpelcmp_x3, satd ? h->pixf.satd_x3 : h->pixf.sad_x3, sizeof(h->pixf.fpelcmp_x3) );
@@ -731,7 +755,7 @@ x264_t *x264_encoder_open   ( x264_param_t *param )
     x264_predict_8x8c_init( h->param.cpu, h->predict_8x8c );
     x264_predict_8x8_init( h->param.cpu, h->predict_8x8, &h->predict_8x8_filter );
     x264_predict_4x4_init( h->param.cpu, h->predict_4x4 );
-    if( !h->param.b_cabac );
+    if( !h->param.b_cabac )
         x264_init_vlc_tables();
     x264_pixel_init( h->param.cpu, &h->pixf );
     x264_dct_init( h->param.cpu, &h->dctf );
@@ -1243,6 +1267,15 @@ static void x264_slice_write( x264_t *h )
                             h->stat.frame.i_mb_count_ref[i_list][i_ref] ++;
                     }
         }
+        if( h->mb.i_cbp_luma || h->mb.i_cbp_chroma )
+        {
+            int cbpsum = (h->mb.i_cbp_luma&1) + ((h->mb.i_cbp_luma>>1)&1)
+                       + ((h->mb.i_cbp_luma>>2)&1) + (h->mb.i_cbp_luma>>3);
+            int b_intra = IS_INTRA(h->mb.i_type);
+            h->stat.frame.i_mb_cbp[!b_intra + 0] += cbpsum;
+            h->stat.frame.i_mb_cbp[!b_intra + 2] += h->mb.i_cbp_chroma >= 1;
+            h->stat.frame.i_mb_cbp[!b_intra + 4] += h->mb.i_cbp_chroma == 2;
+        }
         if( h->mb.i_cbp_luma && !IS_INTRA(h->mb.i_type) )
         {
             h->stat.frame.i_mb_count_8x8dct[0] ++;
@@ -1384,7 +1417,6 @@ int     x264_encoder_encode( x264_t *h,
     else
     {
         thread_current =
-        thread_prev    =
         thread_oldest  = h;
     }
 
@@ -1664,6 +1696,8 @@ static void x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
         h->stat.i_mb_partition[h->sh.i_type][i] += h->stat.frame.i_mb_partition[i];
     for( i = 0; i < 2; i++ )
         h->stat.i_mb_count_8x8dct[i] += h->stat.frame.i_mb_count_8x8dct[i];
+    for( i = 0; i < 6; i++ )
+        h->stat.i_mb_cbp[i] += h->stat.frame.i_mb_cbp[i];
     if( h->sh.i_type != SLICE_TYPE_I )
         for( i_list = 0; i_list < 2; i_list++ )
             for( i = 0; i < 32; i++ )
@@ -1916,19 +1950,21 @@ void    x264_encoder_close  ( x264_t *h )
 
     if( h->stat.i_slice_count[SLICE_TYPE_I] + h->stat.i_slice_count[SLICE_TYPE_P] + h->stat.i_slice_count[SLICE_TYPE_B] > 0 )
     {
+#define SUM3(p) (p[SLICE_TYPE_I] + p[SLICE_TYPE_P] + p[SLICE_TYPE_B])
+#define SUM3b(p,o) (p[SLICE_TYPE_I][o] + p[SLICE_TYPE_P][o] + p[SLICE_TYPE_B][o])
+        int64_t i_i8x8 = SUM3b( h->stat.i_mb_count, I_8x8 );
+        int64_t i_intra = i_i8x8 + SUM3b( h->stat.i_mb_count, I_4x4 )
+                                 + SUM3b( h->stat.i_mb_count, I_16x16 );
+        int64_t i_all_intra = i_intra + SUM3b( h->stat.i_mb_count, I_PCM);
         const int i_count = h->stat.i_slice_count[SLICE_TYPE_I] +
                             h->stat.i_slice_count[SLICE_TYPE_P] +
                             h->stat.i_slice_count[SLICE_TYPE_B];
+        int64_t i_mb_count = i_count * h->mb.i_mb_count;
         float fps = (float) h->param.i_fps_num / h->param.i_fps_den;
-#define SUM3(p) (p[SLICE_TYPE_I] + p[SLICE_TYPE_P] + p[SLICE_TYPE_B])
-#define SUM3b(p,o) (p[SLICE_TYPE_I][o] + p[SLICE_TYPE_P][o] + p[SLICE_TYPE_B][o])
         float f_bitrate = fps * SUM3(h->stat.i_slice_size) / i_count / 125;
 
         if( h->pps->b_transform_8x8_mode )
         {
-            int64_t i_i8x8 = SUM3b( h->stat.i_mb_count, I_8x8 );
-            int64_t i_intra = i_i8x8 + SUM3b( h->stat.i_mb_count, I_4x4 )
-                                     + SUM3b( h->stat.i_mb_count, I_16x16 );
             x264_log( h, X264_LOG_INFO, "8x8 transform  intra:%.1f%%  inter:%.1f%%\n",
                       100. * i_i8x8 / i_intra,
                       100. * h->stat.i_mb_count_8x8dct[1] / h->stat.i_mb_count_8x8dct[0] );
@@ -1941,6 +1977,14 @@ void    x264_encoder_close  ( x264_t *h )
                       h->stat.i_direct_frames[1] * 100. / h->stat.i_slice_count[SLICE_TYPE_B],
                       h->stat.i_direct_frames[0] * 100. / h->stat.i_slice_count[SLICE_TYPE_B] );
         }
+
+        x264_log( h, X264_LOG_INFO, "coded y,uvDC,uvAC intra:%.1f%% %.1f%% %.1f%% inter:%.1f%% %.1f%% %.1f%%\n",
+                  h->stat.i_mb_cbp[0] * 100.0 / (i_all_intra*4),
+                  h->stat.i_mb_cbp[2] * 100.0 / (i_all_intra  ),
+                  h->stat.i_mb_cbp[4] * 100.0 / (i_all_intra  ),
+                  h->stat.i_mb_cbp[1] * 100.0 / ((i_mb_count - i_all_intra)*4),
+                  h->stat.i_mb_cbp[3] * 100.0 / ((i_mb_count - i_all_intra)  ),
+                  h->stat.i_mb_cbp[5] * 100.0 / ((i_mb_count - i_all_intra)) );
 
         for( i_list = 0; i_list < 2; i_list++ )
         {

@@ -858,10 +858,13 @@ static inline void x264_cabac_encode_renorm( x264_cabac_t *cb )
     x264_cabac_putbyte( cb );
 }
 
+/* Making custom versions of this function, even in asm, for the cases where
+ * b is known to be 0 or 1, proved to be somewhat useful on x86_32 with GCC 3.4
+ * but nearly useless with GCC 4.3 and worse than useless on x86_64. */
 void x264_cabac_encode_decision_c( x264_cabac_t *cb, int i_ctx, int b )
 {
     int i_state = cb->state[i_ctx];
-    int i_range_lps = x264_cabac_range_lps[i_state][(cb->i_range>>6)&0x03];
+    int i_range_lps = x264_cabac_range_lps[i_state][(cb->i_range>>6)-4];
     cb->i_range -= i_range_lps;
     if( b != (i_state >> 6) )
     {

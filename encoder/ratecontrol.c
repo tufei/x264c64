@@ -173,13 +173,13 @@ static inline double qscale2bits(ratecontrol_entry_t *rce, double qscale)
 }
 
 // Find the total AC energy of the block in all planes.
-static NOINLINE int ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame )
+static NOINLINE uint32_t ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame )
 {
     /* This function contains annoying hacks because GCC has a habit of reordering emms
      * and putting it after floating point ops.  As a result, we put the emms at the end of the
      * function and make sure that its always called before the float math.  Noinline makes
      * sure no reordering goes on. */
-    unsigned int var = 0, i;
+    uint32_t var = 0, i;
     for( i = 0; i < 3; i++ )
     {
         int w = i ? 8 : 16;
@@ -191,7 +191,6 @@ static NOINLINE int ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *f
         stride <<= h->mb.b_interlaced;
         var += h->pixf.var[pix]( frame->plane[i]+offset, stride );
     }
-    var = X264_MAX(var,1);
     x264_emms();
     return var;
 }
@@ -222,7 +221,13 @@ static const uint8_t exp2_lut[64] = {
     177, 182, 186, 191, 196, 201, 206, 211, 216, 221, 226, 232, 237, 242, 248, 253,
 };
 
-static int x264_exp2fix8( float x )
+static ALWAYS_INLINE float x264_log2( uint32_t x )
+{
+    int lz = x264_clz( x );
+    return log2_lut[(x<<lz>>24)&0x7f] + (31 - lz);
+}
+
+static ALWAYS_INLINE int x264_exp2fix8( float x )
 {
     int i, f;
     x += 8;
@@ -237,14 +242,39 @@ void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame )
 {
     /* constants chosen to result in approximately the same overall bitrate as without AQ.
      * FIXME: while they're written in 5 significant digits, they're only tuned to 2. */
-    float strength = h->param.rc.f_aq_strength * 1.0397;
     int mb_x, mb_y;
+    float strength;
+    float avg_adj = 0.f;
+    if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+    {
+        for( mb_y = 0; mb_y < h->sps->i_mb_height; mb_y++ )
+            for( mb_x = 0; mb_x < h->sps->i_mb_width; mb_x++ )
+            {
+                uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
+                float qp_adj = x264_log2( energy + 2 );
+                qp_adj *= qp_adj;
+                frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
+                avg_adj += qp_adj;
+            }
+        avg_adj /= h->mb.i_mb_count;
+        strength = h->param.rc.f_aq_strength * avg_adj * (1.f / 6000.f);
+    }
+    else
+        strength = h->param.rc.f_aq_strength * 1.0397f;
     for( mb_y = 0; mb_y < h->sps->i_mb_height; mb_y++ )
         for( mb_x = 0; mb_x < h->sps->i_mb_width; mb_x++ )
         {
-            uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
-            int lz = x264_clz( energy );
-            float qp_adj = strength * (log2_lut[(energy<<lz>>24)&0x7f] - lz + 16.573f);
+            float qp_adj;
+            if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+            {
+                qp_adj = frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride];
+                qp_adj = strength * (qp_adj - avg_adj);
+            }
+            else
+            {
+                uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
+                qp_adj = strength * (x264_log2( X264_MAX(energy, 1) ) - 14.427f);
+            }
             frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
             if( h->frames.b_have_lowres )
                 frame->i_inv_qscale_factor[mb_x + mb_y*h->mb.i_mb_stride] = x264_exp2fix8(qp_adj*(-1.f/6.f));
@@ -262,10 +292,6 @@ void x264_adaptive_quant( x264_t *h )
 {
     x264_emms();
     h->mb.i_qp = x264_clip3( h->rc->f_qpm + h->fenc->f_qp_offset[h->mb.i_mb_xy] + .5, h->param.rc.i_qp_min, h->param.rc.i_qp_max );
-    /* If the QP of this MB is within 1 of the previous MB, code the same QP as the previous MB,
-     * to lower the bit cost of the qp_delta. */
-    if( abs(h->mb.i_qp - h->mb.i_last_qp) == 1 )
-        h->mb.i_qp = h->mb.i_last_qp;
 }
 
 int x264_ratecontrol_new( x264_t *h )
@@ -865,12 +891,7 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp )
     if( rce )
         rce->new_qp = rc->qp;
 
-    /* accum_p_qp needs to be here so that future frames can benefit from the
-     * data before this frame is done. but this only works because threading
-     * guarantees to not re-encode any frames. so the non-threaded case does
-     * accum_p_qp later. */
-    if( h->param.i_threads > 1 )
-        accum_p_qp_update( h, rc->qp );
+    accum_p_qp_update( h, rc->qp );
 
     if( h->sh.i_type != SLICE_TYPE_B )
         rc->last_non_b_pict_type = h->sh.i_type;
@@ -1124,9 +1145,6 @@ void x264_ratecontrol_end( x264_t *h, int bits )
         rc->cplxr_sum *= rc->cbr_decay;
         rc->wanted_bits_window += rc->bitrate / rc->fps;
         rc->wanted_bits_window *= rc->cbr_decay;
-
-        if( h->param.i_threads == 1 )
-            accum_p_qp_update( h, rc->qpa_rc );
     }
 
     if( rc->b_2pass )
