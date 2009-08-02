@@ -139,7 +139,6 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     {
         int16_t *mvr = fref1->lowres_mvs[0][p1-p0-1][i_mb_xy];
         int dmv[2][2];
-        int mv0[2] = {0,0};
 
         h->mc.memcpy_aligned( &m[1], &m[0], sizeof(x264_me_t) );
         LOAD_HPELS_LUMA( m[1].p_fref, fref1->lowres );
@@ -153,9 +152,13 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
 
         TRY_BIDIR( dmv[0], dmv[1], 0 );
         if( dmv[0][0] | dmv[0][1] | dmv[1][0] | dmv[1][1] )
-           TRY_BIDIR( mv0, mv0, 0 );
-//      if( i_bcost < 60 ) // arbitrary threshold
-//          return i_bcost;
+        {
+            int i_cost;
+            h->mc.avg[PIXEL_8x8]( pix1_1, 16, m[0].p_fref[0], m[0].i_stride[0], m[1].p_fref[0], m[1].i_stride[0], i_bipred_weight );
+            i_cost = h->pixf.mbcmp[PIXEL_8x8]( m[0].p_fenc[0], FENC_STRIDE, pix1_1, 16 );
+            if( i_bcost > i_cost )
+                i_bcost = i_cost;
+        }
     }
 
     i_cost_bak = i_bcost;
@@ -235,7 +238,7 @@ lowres_intra_mb:
             }
             i_icost = X264_MIN4( satds[0], satds[1], satds[2], satds[3] );
 
-            h->predict_8x8_filter( pix, edge, ALL_NEIGHBORS, ALL_NEIGHBORS );
+            h->predict_8x8_filter( pix, edge_1, ALL_NEIGHBORS, ALL_NEIGHBORS );
             for( i=3; i<9; i++ )
             {
                 int satd;
