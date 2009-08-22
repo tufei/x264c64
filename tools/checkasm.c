@@ -30,6 +30,12 @@
 #include "common/common.h"
 #include "common/cpu.h"
 
+// GCC doesn't align stack variables on ARM, so use .bss
+#ifdef ARCH_ARM
+#undef DECLARE_ALIGNED_16
+#define DECLARE_ALIGNED_16( var ) DECLARE_ALIGNED( static var, 16 )
+#endif
+
 /* buf1, buf2: initialised to random data and shouldn't write into them */
 uint8_t * buf1, * buf2;
 /* buf3, buf4: used to store output */
@@ -76,17 +82,15 @@ static const char **intra_predict_8x8_names = intra_predict_4x4_names;
 
 static inline uint32_t read_time(void)
 {
+    uint32_t a = 0;
 #if defined(__GNUC__) && (defined(ARCH_X86) || defined(ARCH_X86_64))
-    uint32_t a;
     asm volatile( "rdtsc" :"=a"(a) ::"edx" );
-    return a;
 #elif defined(ARCH_PPC)
-    uint32_t a;
     asm volatile( "mftb %0" : "=r" (a) );
-    return a;
-#else
-    return 0;
+#elif defined(ARCH_ARM)     // ARMv7 only
+    asm volatile( "mrc p15, 0, %0, c9, c13, 0" : "=r"(a) );
 #endif
+    return a;
 }
 
 static bench_t* get_bench( const char *name, int cpu )
@@ -158,11 +162,14 @@ static void print_bench(void)
                     b->cpu&X264_CPU_SSE2_IS_SLOW && j<MAX_CPUS && b[1].cpu&X264_CPU_SSE2_IS_FAST && !(b[1].cpu&X264_CPU_SSE3) ? "sse2slow" :
                     b->cpu&X264_CPU_SSE2 ? "sse2" :
                     b->cpu&X264_CPU_MMX ? "mmx" :
-                    b->cpu&X264_CPU_ALTIVEC ? "altivec" : "c",
+                    b->cpu&X264_CPU_ALTIVEC ? "altivec" :
+                    b->cpu&X264_CPU_NEON ? "neon" :
+                    b->cpu&X264_CPU_ARMV6 ? "armv6" : "c",
                     b->cpu&X264_CPU_CACHELINE_32 ? "_c32" :
                     b->cpu&X264_CPU_CACHELINE_64 ? "_c64" :
                     b->cpu&X264_CPU_SSE_MISALIGN ? "_misalign" :
-                    b->cpu&X264_CPU_LZCNT ? "_lzcnt" : "",
+                    b->cpu&X264_CPU_LZCNT ? "_lzcnt" :
+                    b->cpu&X264_CPU_FAST_NEON_MRC ? "_fast_mrc" : "",
                     ((int64_t)10*b->cycles/b->den - nop_time)/4 );
         }
 }
@@ -748,7 +755,7 @@ static int check_mc( int cpu_ref, int cpu_new )
     x264_mc_functions_t mc_a;
     x264_pixel_function_t pixel;
 
-    uint8_t *src     = &buf1[2*32+2];
+    uint8_t *src     = &buf1[2*64+2];
     uint8_t *src2[4] = { &buf1[3*64+2], &buf1[5*64+2],
                          &buf1[7*64+2], &buf1[9*64+2] };
     uint8_t *dst1    = buf3;
@@ -959,6 +966,32 @@ static int check_mc( int cpu_ref, int cpu_new )
     INTEGRAL_INIT( integral_init4v, 14, sum, sum+9*stride, stride );
     INTEGRAL_INIT( integral_init8v, 9, sum, stride );
     report( "integral init :" );
+
+    if( mc_a.mbtree_propagate_cost != mc_ref.mbtree_propagate_cost )
+    {
+        ok = 1; used_asm = 1;
+        set_func_name( "mbtree_propagate" );
+        int *dsta = (int*)buf3;
+        int *dstc = dsta+400;
+        uint16_t *prop = (uint16_t*)buf1;
+        uint16_t *intra = (uint16_t*)buf4;
+        uint16_t *inter = intra+400;
+        uint16_t *qscale = inter+400;
+        uint16_t *rand = (uint16_t*)buf2;
+        for( i=0; i<400; i++ )
+        {
+            intra[i]  = *rand++ & 0x7fff;
+            intra[i] += !intra[i];
+            inter[i]  = *rand++ & 0x7fff;
+            qscale[i] = *rand++ & 0x7fff;
+        }
+        call_c( mc_c.mbtree_propagate_cost, dstc, prop, intra, inter, qscale, 400 );
+        call_a( mc_a.mbtree_propagate_cost, dsta, prop, intra, inter, qscale, 400 );
+        // I don't care about exact rounding, this is just how close the floating-point implementation happens to be
+        for( i=0; i<400; i++ )
+            ok &= abs(dstc[i]-dsta[i]) <= (abs(dstc[i])>512) || fabs((double)dstc[i]/dsta[i]-1) < 1e-6;
+        report( "mbtree propagate :" );
+    }
 
     return ret;
 }
@@ -1554,6 +1587,13 @@ static int check_all_flags( void )
         fprintf( stderr, "x264: ALTIVEC against C\n" );
         ret = check_all_funcs( 0, X264_CPU_ALTIVEC );
     }
+#elif ARCH_ARM
+    if( x264_cpu_detect() & X264_CPU_ARMV6 )
+        ret |= add_flags( &cpu0, &cpu1, X264_CPU_ARMV6, "ARMv6" );
+    if( x264_cpu_detect() & X264_CPU_NEON )
+        ret |= add_flags( &cpu0, &cpu1, X264_CPU_NEON, "NEON" );
+    if( x264_cpu_detect() & X264_CPU_FAST_NEON_MRC )
+        ret |= add_flags( &cpu0, &cpu1, X264_CPU_FAST_NEON_MRC, "Fast NEON MRC" );
 #endif
     return ret;
 }
@@ -1565,7 +1605,7 @@ int main(int argc, char *argv[])
 
     if( argc > 1 && !strncmp( argv[1], "--bench", 7 ) )
     {
-#if !defined(ARCH_X86) && !defined(ARCH_X86_64) && !defined(ARCH_PPC)
+#if !defined(ARCH_X86) && !defined(ARCH_X86_64) && !defined(ARCH_PPC) && !defined(ARCH_ARM)
         fprintf( stderr, "no --bench for your cpu until you port rdtsc\n" );
         return 1;
 #endif
@@ -1584,6 +1624,11 @@ int main(int argc, char *argv[])
     srand( i );
 
     buf1 = x264_malloc( 0x3e00 + 16*BENCH_ALIGNS );
+    if( !buf1 )
+    {
+        fprintf( stderr, "malloc failed, unable to initiate tests!\n" );
+        return -1;
+    }
     buf2 = buf1 + 0xf00;
     buf3 = buf2 + 0xf00;
     buf4 = buf3 + 0x1000;

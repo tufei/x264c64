@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 68
+#define X264_BUILD 72
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -63,6 +63,9 @@ typedef struct x264_t x264_t;
 #define X264_CPU_SSE42          0x004000  /* SSE4.2 */
 #define X264_CPU_SSE_MISALIGN   0x008000  /* Phenom support for misaligned SSE instruction arguments */
 #define X264_CPU_LZCNT          0x010000  /* Phenom support for "leading zero count" instruction. */
+#define X264_CPU_ARMV6          0x020000
+#define X264_CPU_NEON           0x040000  /* ARM NEON */
+#define X264_CPU_FAST_NEON_MRC  0x080000  /* Transfer from NEON to ARM register is fast (Cortex-A9) */
 
 /* Analyse flags
  */
@@ -242,6 +245,7 @@ typedef struct x264_param_t
         int          i_noise_reduction; /* adaptive pseudo-deadzone */
         float        f_psy_rd; /* Psy RD strength */
         float        f_psy_trellis; /* Psy trellis strength */
+        int          b_psy; /* Toggle all psy optimizations */
 
         /* the deadzone size that will be used in luma quantization */
         int          i_luma_deadzone[2]; /* {inter, intra} */
@@ -271,6 +275,8 @@ typedef struct x264_param_t
 
         int         i_aq_mode;      /* psy adaptive QP. (X264_AQ_*) */
         float       f_aq_strength;
+        int         b_mb_tree;      /* Macroblock-tree ratecontrol. */
+        int         i_lookahead;
 
         /* 2pass */
         int         b_stat_write;   /* Enable stat writing in psz_stat_out */
@@ -291,6 +297,12 @@ typedef struct x264_param_t
     int b_aud;                  /* generate access unit delimiters */
     int b_repeat_headers;       /* put SPS/PPS before each keyframe */
     int i_sps_id;               /* SPS and PPS id number */
+
+    /* Optional callback for freeing this x264_param_t when it is done being used.
+     * Only used when the x264_param_t sits in memory for an indefinite period of time,
+     * i.e. when an x264_param_t is passed to x264_t in an x264_picture_t or in zones.
+     * Not used when x264_encoder_reconfig is called directly. */
+    void (*param_free)( void* );
 } x264_param_t;
 
 typedef struct {
@@ -351,14 +363,22 @@ typedef struct
     int     i_qpplus1;
     /* In: user pts, Out: pts of encoded picture (user)*/
     int64_t i_pts;
+    /* In: custom encoding parameters to be set from this frame forwards
+           (in coded order, not display order). If NULL, continue using
+           parameters from the previous frame.  Some parameters, such as
+           aspect ratio, can only be changed per-GOP due to the limitations
+           of H.264 itself; in this case, the caller must force an IDR frame
+           if it needs the changed parameter to apply immediately. */
+    x264_param_t *param;
 
     /* In: raw data */
     x264_image_t img;
 } x264_picture_t;
 
 /* x264_picture_alloc:
- *  alloc data for a picture. You must call x264_picture_clean on it. */
-void x264_picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height );
+ *  alloc data for a picture. You must call x264_picture_clean on it.
+ *  returns 0 on success, or -1 on malloc failure. */
+int x264_picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height );
 
 /* x264_picture_clean:
  *  free associated resource for a x264_picture_t allocated with
@@ -415,8 +435,10 @@ int x264_nal_encode( void *, int *, int b_annexeb, x264_nal_t *nal );
  *      create a new encoder handler, all parameters from x264_param_t are copied */
 x264_t *x264_encoder_open   ( x264_param_t * );
 /* x264_encoder_reconfig:
- *      change encoder options while encoding,
- *      analysis-related parameters from x264_param_t are copied */
+ *      analysis-related parameters from x264_param_t are copied.
+ *      this takes effect immediately, on whichever frame is encoded next;
+ *      due to delay, this may not be the next frame passed to encoder_encode.
+ *      if the change should apply to some particular frame, use x264_picture_t->param instead. */
 int     x264_encoder_reconfig( x264_t *, x264_param_t * );
 /* x264_encoder_headers:
  *      return the SPS and PPS that will be used for the whole stream */
@@ -427,5 +449,9 @@ int     x264_encoder_encode ( x264_t *, x264_nal_t **, int *, x264_picture_t *, 
 /* x264_encoder_close:
  *      close an encoder handler */
 void    x264_encoder_close  ( x264_t * );
+/* x264_encoder_delayed_frames:
+ *      return the number of currently delayed (buffered) frames
+ *      this should be used at the end of the stream, to know when you have all the encoded frames. */
+int     x264_encoder_delayed_frames( x264_t * );
 
 #endif

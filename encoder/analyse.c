@@ -225,7 +225,7 @@ uint16_t *x264_cost_mv_fpel[92][4];
 uint16_t x264_cost_ref[92][3][33];
 
 /* initialize an array of lambda*nbits for all possible mvs */
-static void x264_mb_analyse_load_costs( x264_t *h, x264_mb_analysis_t *a )
+static int x264_mb_analyse_load_costs( x264_t *h, x264_mb_analysis_t *a )
 {
     static int16_t *p_cost_mv[92] = 
     { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -246,7 +246,7 @@ static void x264_mb_analyse_load_costs( x264_t *h, x264_mb_analysis_t *a )
         x264_emms();
         /* could be faster, but isn't called many times */
         /* factor of 4 from qpel, 2 from sign, and 2 because mv can be opposite from mvp */
-        p_cost_mv[a->i_lambda] = x264_malloc( (4*4*2048 + 1) * sizeof(int16_t) );
+        CHECKED_MALLOC( p_cost_mv[a->i_lambda], (4*4*2048 + 1) * sizeof(int16_t) );
         p_cost_mv[a->i_lambda] += 2*4*2048;
         for( i = 0; i <= 2*4*2048; i++ )
         {
@@ -275,12 +275,15 @@ static void x264_mb_analyse_load_costs( x264_t *h, x264_mb_analysis_t *a )
     {
         for( j=0; j<4; j++ )
         {
-            x264_cost_mv_fpel[a->i_lambda][j] = x264_malloc( (4*2048 + 1) * sizeof(int16_t) );
+            CHECKED_MALLOC( x264_cost_mv_fpel[a->i_lambda][j], (4*2048 + 1) * sizeof(int16_t) );
             x264_cost_mv_fpel[a->i_lambda][j] += 2*2048;
             for( i = -2*2048; i < 2*2048; i++ )
                 x264_cost_mv_fpel[a->i_lambda][j][i] = p_cost_mv[a->i_lambda][i*4+j];
         }
     }
+    return 0;
+fail:
+    return -1;
 }
 
 static void x264_mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int i_qp )
@@ -313,8 +316,8 @@ static void x264_mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int i_qp )
         h->mb.i_trellis_lambda2[1][1] = x264_trellis_lambda2_tab[1][h->mb.i_chroma_qp];
     }
     h->mb.i_psy_rd_lambda = a->i_lambda;
-    /* Adjusting chroma lambda based on QP offset hurts PSNR, so we'll leave it as part of psy-RD. */
-    h->mb.i_chroma_lambda2_offset = h->mb.i_psy_rd ? x264_chroma_lambda2_offset_tab[h->mb.i_qp-h->mb.i_chroma_qp+12] : 256;
+    /* Adjusting chroma lambda based on QP offset hurts PSNR but improves visual quality. */
+    h->mb.i_chroma_lambda2_offset = h->param.analyse.b_psy ? x264_chroma_lambda2_offset_tab[h->mb.i_qp-h->mb.i_chroma_qp+12] : 256;
 
     h->mb.i_me_method = h->param.analyse.i_me_method;
     h->mb.i_subpel_refine = h->param.analyse.i_subpel_refine;
@@ -2865,17 +2868,30 @@ static inline void x264_mb_analyse_qp_rd( x264_t *h, x264_mb_analysis_t *a )
 {
     int bcost, cost, direction, failures, prevcost, origcost;
     int orig_qp = h->mb.i_qp, bqp = h->mb.i_qp;
+    int last_qp_tried = 0;
     origcost = bcost = x264_rd_cost_mb( h, a->i_lambda2 );
 
     /* If CBP is already zero, don't raise the quantizer any higher. */
     for( direction = h->mb.cbp[h->mb.i_mb_xy] ? 1 : -1; direction >= -1; direction-=2 )
     {
+        /* Without psy-RD, require monotonicity when moving quant away from previous
+         * macroblock's quant; allow 1 failure when moving quant towards previous quant.
+         * With psy-RD, allow 1 failure when moving quant away from previous quant,
+         * allow 2 failures when moving quant towards previous quant.
+         * Psy-RD generally seems to result in more chaotic RD score-vs-quantizer curves. */
+        int threshold = (!!h->mb.i_psy_rd);
+        /* Raise the threshold for failures if we're moving towards the last QP. */
+        if( ( h->mb.i_last_qp < orig_qp && direction == -1 ) ||
+            ( h->mb.i_last_qp > orig_qp && direction ==  1 ) )
+            threshold++;
         h->mb.i_qp = orig_qp;
         failures = 0;
         prevcost = origcost;
-        while( h->mb.i_qp > 0 && h->mb.i_qp < 51 )
+        h->mb.i_qp += direction;
+        while( h->mb.i_qp >= h->param.rc.i_qp_min && h->mb.i_qp <= h->param.rc.i_qp_max )
         {
-            h->mb.i_qp += direction;
+            if( h->mb.i_last_qp == h->mb.i_qp )
+                last_qp_tried = 1;
             h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
             cost = x264_rd_cost_mb( h, a->i_lambda2 );
             COPY2_IF_LT( bcost, cost, bqp, h->mb.i_qp );
@@ -2888,25 +2904,29 @@ static inline void x264_mb_analyse_qp_rd( x264_t *h, x264_mb_analysis_t *a )
                 failures++;
             prevcost = cost;
 
-            /* Without psy-RD, require monotonicity when lowering
-             * quant, allow 1 failure when raising quant.
-             * With psy-RD, allow 1 failure when lowering quant,
-             * allow 2 failures when raising quant.
-             * Psy-RD generally seems to result in more chaotic
-             * RD score-vs-quantizer curves. */
-            if( failures > ((direction + 1)>>1)+(!!h->mb.i_psy_rd) )
+            if( failures > threshold )
                 break;
             if( direction == 1 && !h->mb.cbp[h->mb.i_mb_xy] )
                 break;
+            h->mb.i_qp += direction;
         }
+    }
+
+    /* Always try the last block's QP. */
+    if( !last_qp_tried )
+    {
+        h->mb.i_qp = h->mb.i_last_qp;
+        h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
+        cost = x264_rd_cost_mb( h, a->i_lambda2 );
+        COPY2_IF_LT( bcost, cost, bqp, h->mb.i_qp );
     }
 
     h->mb.i_qp = bqp;
     h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
 
     /* Check transform again; decision from before may no longer be optimal. */
-    if( h->mb.i_qp != orig_qp && x264_mb_transform_8x8_allowed( h ) &&
-        h->param.analyse.b_transform_8x8 )
+    if( h->mb.i_qp != orig_qp && h->param.analyse.b_transform_8x8 &&
+        x264_mb_transform_8x8_allowed( h ) )
     {
         h->mb.b_transform_8x8 ^= 1;
         cost = x264_rd_cost_mb( h, a->i_lambda2 );
@@ -2918,7 +2938,7 @@ static inline void x264_mb_analyse_qp_rd( x264_t *h, x264_mb_analysis_t *a )
 /*****************************************************************************
  * x264_macroblock_analyse:
  *****************************************************************************/
-void x264_macroblock_analyse( x264_t *h )
+int x264_macroblock_analyse( x264_t *h )
 {
     x264_mb_analysis_t analysis;
     int i_cost = COST_MAX;
@@ -2993,12 +3013,13 @@ void x264_macroblock_analyse( x264_t *h )
             int i_thresh16x8;
             int i_satd_inter, i_satd_intra;
 
-            x264_mb_analyse_load_costs( h, &analysis );
+            if( x264_mb_analyse_load_costs( h, &analysis ) )
+                return -1;
 
             x264_mb_analyse_inter_p16x16( h, &analysis );
 
             if( h->mb.i_type == P_SKIP )
-                return;
+                return 0;
 
             if( flags & X264_ANALYSE_PSUB16x16 )
             {
@@ -3285,7 +3306,8 @@ void x264_macroblock_analyse( x264_t *h )
             int i_satd_inter = 0; // shut up uninitialized warning
             h->mb.b_skip_mc = 0;
 
-            x264_mb_analyse_load_costs( h, &analysis );
+            if( x264_mb_analyse_load_costs( h, &analysis ) )
+                return -1;
 
             /* select best inter mode */
             /* direct must be first */
@@ -3311,7 +3333,7 @@ void x264_macroblock_analyse( x264_t *h )
                 {
                     h->mb.i_type = B_SKIP;
                     x264_analyse_update_cache( h, &analysis );
-                    return;
+                    return 0;
                 }
             }
 
@@ -3536,6 +3558,7 @@ void x264_macroblock_analyse( x264_t *h )
         x264_psy_trellis_init( h, 0 );
     if( h->mb.b_trellis == 1 || h->mb.b_noise_reduction )
         h->mb.i_skip_intra = 0;
+    return 0;
 }
 
 /*-------------------- Update MB from the analysis ----------------------*/

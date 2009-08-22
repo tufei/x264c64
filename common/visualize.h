@@ -26,7 +26,7 @@
 #endif
 
 #if VISUALIZE
-void x264_visualize_init( x264_t *h );
+int  x264_visualize_init( x264_t *h );
 void x264_visualize_mb( x264_t *h );
 void x264_visualize_show( x264_t *h );
 void x264_visualize_close( x264_t *h );
