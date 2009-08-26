@@ -82,9 +82,8 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     uint8_t *pix2 = pix1_1+8;
     x264_me_t m[2];
     int i_bcost = COST_MAX;
-    int i_cost_bak;
     int l, i;
-
+    int list_used = 0;
     fenc_mvs[0] = &frames[b]->lowres_mvs[0][b-p0-1][i_mb_xy];
     fenc_mvs[1] = &frames[b]->lowres_mvs[1][p1-b-1][i_mb_xy];
     fenc_costs[0] = &frames[b]->lowres_mv_costs[0][b-p0-1][i_mb_xy];
@@ -93,7 +92,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     h->mb.pic.p_fenc[0] = h->mb.pic.fenc_buf;
     h->mc.copy[PIXEL_8x8]( h->mb.pic.p_fenc[0], FENC_STRIDE, &fenc->lowres[0][i_pel_offset], i_stride, 8 );
 
-    if( !p0 && !p1 && !b )
+    if( p0 == p1 )
         goto lowres_intra_mb;
 
     // no need for h->mb.mv_min[]
@@ -133,8 +132,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
         h->mc.avg[PIXEL_8x8]( pix1_1, 16, src1, stride1, src2, stride2, i_bipred_weight ); \
         i_cost = penalty + h->pixf.mbcmp[PIXEL_8x8]( \
                            m[0].p_fenc[0], FENC_STRIDE, pix1_1, 16 ); \
-        if( i_bcost > i_cost ) \
-            i_bcost = i_cost; \
+        COPY2_IF_LT( i_bcost, i_cost, list_used, 3 ); \
     }
 
     m[0].i_pixel = PIXEL_8x8;
@@ -164,12 +162,10 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             int i_cost;
             h->mc.avg[PIXEL_8x8]( pix1_1, 16, m[0].p_fref[0], m[0].i_stride[0], m[1].p_fref[0], m[1].i_stride[0], i_bipred_weight );
             i_cost = h->pixf.mbcmp[PIXEL_8x8]( m[0].p_fenc[0], FENC_STRIDE, pix1_1, 16 );
-            if( i_bcost > i_cost )
-                i_bcost = i_cost;
+            COPY2_IF_LT( i_bcost, i_cost, list_used, 3 );
         }
     }
 
-    i_cost_bak = i_bcost;
     for( l = 0; l < 1 + b_bidir; l++ )
     {
         if( do_search[l] )
@@ -205,16 +201,18 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             _mem4(m[l].mv) = _mem4(fenc_mvs[l]);
             m[l].cost = *fenc_costs[l];
         }
-        i_bcost = X264_MIN( i_bcost, m[l].cost );
+        COPY2_IF_LT( i_bcost, m[l].cost, list_used, l+1 );
     }
 
     if( b_bidir && ( _mem4(m[0].mv) || _mem4(m[1].mv) ) )
         TRY_BIDIR( m[0].mv, m[1].mv, 5 );
 
+    frames[b]->lowres_inter_types[b-p0][p1-b][i_mb_xy] = list_used;
+
 lowres_intra_mb:
     /* forbid intra-mbs in B-frames, because it's rare and not worth checking */
     /* FIXME: Should we still forbid them now that we cache intra scores? */
-    if( !b_bidir )
+    if( !b_bidir || h->param.rc.b_mb_tree )
     {
         int i_icost, b_intra;
         if( !fenc->b_intra_calculated )
@@ -260,16 +258,24 @@ lowres_intra_mb:
         }
         else
             i_icost = fenc->i_intra_cost[i_mb_xy];
-        b_intra = i_icost < i_bcost;
-        if( b_intra )
-            i_bcost = i_icost;
-        if(    i_mb_x > 0 && i_mb_x < h->sps->i_mb_width - 1
-            && i_mb_y > 0 && i_mb_y < h->sps->i_mb_height - 1 )
+        if( !b_bidir )
         {
-            fenc->i_intra_mbs[b-p0] += b_intra;
-            fenc->i_cost_est[0][0] += i_icost;
+            b_intra = i_icost < i_bcost;
+            if( b_intra )
+                i_bcost = i_icost;
+            if(   (i_mb_x > 0 && i_mb_x < h->sps->i_mb_width - 1
+                && i_mb_y > 0 && i_mb_y < h->sps->i_mb_height - 1)
+                || h->sps->i_mb_width <= 2 || h->sps->i_mb_height <= 2 )
+            {
+                fenc->i_intra_mbs[b-p0] += b_intra;
+                fenc->i_cost_est[0][0] += i_icost;
+                if( h->param.rc.i_aq_mode )
+                    fenc->i_cost_est_aq[0][0] += (i_icost * fenc->i_inv_qscale_factor[i_mb_xy] + 128) >> 8;
+            }
         }
     }
+
+    fenc->lowres_costs[b-p0][p1-b][i_mb_xy] = i_bcost;
 
     return i_bcost;
 }
@@ -654,11 +660,24 @@ static void x264_macroblock_tree_finish( x264_t *h, x264_frame_t *frame, int b_b
 
 static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, int p0, int p1, int b )
 {
+#ifndef _TMS320C6400
     x264_frame_t *refs[2] = {frames[p0],frames[p1]};
     int dist_scale_factor = ( ((b-p0) << 8) + ((p1-p0) >> 1) ) / (p1-p0);
     int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
     int16_t (*mvs[2])[2] = { frames[b]->lowres_mvs[0][b-p0-1], frames[b]->lowres_mvs[1][p1-b-1] };
     int *buf = h->scratch_buffer;
+#else
+    x264_frame_t *refs[2];
+    int dist_scale_factor = ( ((b-p0) << 8) + ((p1-p0) >> 1) ) / (p1-p0);
+    int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
+    int *buf = h->scratch_buffer;
+    int16_t (*mvs[2])[2];
+
+    refs[0] = frames[p0];
+    refs[1] = frames[p1];
+    mvs[0] = frames[b]->lowres_mvs[0][b-p0-1];
+    mvs[1] = frames[b]->lowres_mvs[1][p1-b-1];
+#endif
 
     for( h->mb.i_mb_y = 0; h->mb.i_mb_y < h->sps->i_mb_height; h->mb.i_mb_y++ )
     {
@@ -687,12 +706,25 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
                         int idx1 = idx0 + 1;
                         int idx2 = idx0 + h->mb.i_mb_stride;
                         int idx3 = idx0 + h->mb.i_mb_stride + 1;
+#ifdef _TMS320C6400
+                        int idx0weight;
+                        int idx1weight;
+                        int idx2weight;
+                        int idx3weight;
+#endif
                         x &= 31;
                         y &= 31;
+#ifdef _TMS320C6400
+                        idx0weight = (32-y)*(32-x);
+                        idx1weight = (32-y)*x;
+                        idx2weight = y*(32-x);
+                        idx3weight = y*x;
+#else
                         int idx0weight = (32-y)*(32-x);
                         int idx1weight = (32-y)*x;
                         int idx2weight = y*(32-x);
                         int idx3weight = y*x;
+#endif
 
                         /* Apply bipred weighting. */
                         if( lists_used == 3 )
@@ -858,7 +890,7 @@ static void x264_slicetype_path( x264_t *h, x264_mb_analysis_t *a, x264_frame_t 
     length = X264_MIN(length,X264_LOOKAHEAD_MAX);
 
 #ifdef _TMS320C6400
-    memset(paths, 0, MAX_LENGTH * (X264_BFRAME_MAX + 2));
+    memset(paths, 0, X264_LOOKAHEAD_MAX * (X264_BFRAME_MAX + 2));
 #endif
     /* Iterate over all currently possible paths and add suffixes to each one */
     for( suffix_size = 0; suffix_size < num_paths; suffix_size++ )
@@ -943,6 +975,17 @@ static void x264_slicetype_analyse( x264_t *h, int keyframe )
     int cost1p0, cost2p0, cost1b1, cost2p1;
     int idr_frame_type;
 
+#ifdef _TMS320C6400
+    char best_paths[X264_LOOKAHEAD_MAX][X264_LOOKAHEAD_MAX];
+    int n;
+    int num_bframes;
+    int max_bframes;
+    int num_analysed_frames;
+    int reset_start;
+
+    memset(frames, 0, sizeof(frames));
+#endif
+
     assert( h->frames.b_have_lowres );
 
     if( !h->frames.last_nonb )
@@ -979,12 +1022,20 @@ static void x264_slicetype_analyse( x264_t *h, int keyframe )
         return;
     }
 
+#ifdef _TMS320C6400
+    memset(best_paths, 0, X264_LOOKAHEAD_MAX * X264_LOOKAHEAD_MAX * sizeof(char));
+    best_paths[1][0] = 'P';
+    num_bframes = 0;
+    max_bframes = X264_MIN(num_frames-1, h->param.i_bframe);
+    num_analysed_frames = num_frames;
+#else
     char best_paths[X264_LOOKAHEAD_MAX][X264_LOOKAHEAD_MAX] = {"","P"};
     int n;
     int num_bframes = 0;
     int max_bframes = X264_MIN(num_frames-1, h->param.i_bframe);
     int num_analysed_frames = num_frames;
     int reset_start;
+#endif /* _TMS320C6400 */
     if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, 0, 1 ) )
     {
         frames[1]->i_type = idr_frame_type;

@@ -101,6 +101,7 @@ const char *main_arguments[] =
     "--bitrate", "400",
     "-b", "2",
     "-w",
+    "--rc-lookahead", "1",
     "-r", "2",
     "--mixed-refs",
     "-o", "suzie.264",

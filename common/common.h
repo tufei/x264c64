@@ -426,7 +426,7 @@ struct x264_t
     struct
     {
 #ifdef _TMS320C6400
-        uint32_t dummy[3];  /* hack to satisfy alignment */
+        uint32_t dummy[1];  /* hack to satisfy alignment */
         int16_t luma16x16_dc[16];
         int16_t chroma_dc[2][4];
         // FIXME share memory?

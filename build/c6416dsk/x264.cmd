@@ -23,7 +23,7 @@
 
 -a
 --args 0x20 /* nominal size, will be replaced in the program */
--stack 0x10000
+-stack 0x20000
 -heap 0xA00000
 
 MEMORY
@@ -46,7 +46,7 @@ SECTIONS
 	.bss:		> ISRAM
 	.far:		> SDRAM
 	.stack:		> ISRAM
-	.const:		> ISRAM
+	.const:		> SDRAM
 	.pinit:		> ISRAM
 	.switch:	> ISRAM
 	.sysmem:	> SDRAM

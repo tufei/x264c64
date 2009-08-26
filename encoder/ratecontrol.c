@@ -1389,12 +1389,21 @@ static double predict_size( predictor_t *p, double q, double var )
 static void update_predictor( predictor_t *p, double q, double var, double bits )
 {
     const double range = 1.5;
+#ifdef _TMS320C6400
+    double old_coeff = p->coeff / p->count;
+    double new_coeff = bits*q / var;
+    double new_coeff_clipped = x264_clip3f( new_coeff, old_coeff/range, old_coeff*range );
+    double new_offset = bits*q - new_coeff_clipped * var;
+    if( var < 10 )
+        return;
+#else
     if( var < 10 )
         return;
     double old_coeff = p->coeff / p->count;
     double new_coeff = bits*q / var;
     double new_coeff_clipped = x264_clip3f( new_coeff, old_coeff/range, old_coeff*range );
     double new_offset = bits*q - new_coeff_clipped * var;
+#endif /* _TMS320C6400 */
     if( new_offset >= 0 )
         new_coeff = new_coeff_clipped;
     else
@@ -1511,6 +1520,10 @@ static double clip_qscale( x264_t *h, int pict_type, double q )
         /* Fallback to old purely-reactive algorithm: no lookahead. */
         else
         {
+#ifdef _TMS320C6400
+            double bits;
+            double qf;
+#endif
             if( ( pict_type == SLICE_TYPE_P ||
                 ( pict_type == SLICE_TYPE_I && rcc->last_non_b_pict_type == SLICE_TYPE_I ) ) &&
                 rcc->buffer_fill/rcc->buffer_size < 0.5 )
@@ -1520,8 +1533,13 @@ static double clip_qscale( x264_t *h, int pict_type, double q )
 
             /* Now a hard threshold to make sure the frame fits in VBV.
              * This one is mostly for I-frames. */
+#ifdef _TMS320C6400
+            bits = predict_size( &rcc->pred[h->sh.i_type], q, rcc->last_satd );
+            qf = 1.0;
+#else
             double bits = predict_size( &rcc->pred[h->sh.i_type], q, rcc->last_satd );
             double qf = 1.0;
+#endif
             if( bits > rcc->buffer_fill/2 )
                 qf = x264_clip3f( rcc->buffer_fill/(2*bits), 0.2, 1.0 );
             q /= qf;
