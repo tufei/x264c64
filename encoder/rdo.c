@@ -109,7 +109,7 @@ static uint8_t zero[16];
 static inline int ssd_plane( x264_t *h, int size, int p, int x, int y )
 {
 #ifndef _TMS320C6400
-    DECLARE_ALIGNED_16(static uint8_t zero[16]);
+    ALIGNED_16(static uint8_t zero[16]);
 #endif
     int satd = 0;
     uint8_t *fdec = h->mb.pic.p_fdec[p] + x + y*FDEC_STRIDE;

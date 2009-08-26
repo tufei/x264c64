@@ -236,7 +236,7 @@ static int16_t mvp[2];
 static void cavlc_mb_mvd( x264_t *h, bs_t *s, int i_list, int idx, int width )
 {
 #ifndef _TMS320C6400
-    DECLARE_ALIGNED_4( int16_t mvp[2] );
+    ALIGNED_4( int16_t mvp[2] );
 #endif
     x264_mb_predict_mv( h, i_list, idx, width, mvp );
     bs_write_se( s, h->mb.cache.mv[i_list][x264_scan8[idx]][0] - mvp[0] );
@@ -308,6 +308,7 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
 #if !RDO_SKIP_BS
     if( i_mb_type == I_PCM )
     {
+        uint8_t *p_start = s->p_start;
         bs_write_ue( s, i_mb_i_offset + 25 );
         i_mb_pos_tex = bs_pos( s );
         h->stat.frame.i_mv_bits += i_mb_pos_tex - i_mb_pos_start;
@@ -322,6 +323,9 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
         for( i = 0; i < 8; i++ )
             memcpy( s->p + i*8, h->mb.pic.p_fenc[2] + i*FENC_STRIDE, 8 );
         s->p += 64;
+
+        bs_init( s, s->p, s->p_end - s->p );
+        s->p_start = p_start;
 
         /* if PCM is chosen, we need to store reconstructed frame data */
         h->mc.copy[PIXEL_16x16]( h->mb.pic.p_fdec[0], FDEC_STRIDE, h->mb.pic.p_fenc[0], FENC_STRIDE, 16 );
@@ -366,7 +370,7 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
     else if( i_mb_type == P_L0 )
     {
 #ifndef _TMS320C6400
-        DECLARE_ALIGNED_4( int16_t mvp[2] );
+    	ALIGNED_4( int16_t mvp[2] );
 #endif
 
         if( h->mb.i_partition == D_16x16 )
@@ -466,7 +470,7 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
         /* Motion Vector */
         int i_list;
 #ifndef _TMS320C6400
-        DECLARE_ALIGNED_4( int16_t mvp[2] );
+    	ALIGNED_4( int16_t mvp[2] );
 #endif
         const uint8_t (*b_list)[2] = x264_mb_type_list_table[i_mb_type];
 

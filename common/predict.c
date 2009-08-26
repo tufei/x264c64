@@ -33,6 +33,9 @@
 #ifdef ARCH_PPC
 #   include "ppc/predict.h"
 #endif
+#ifdef ARCH_ARM
+#   include "arm/predict.h"
+#endif
 
 /****************************************************************************
  * 16x16 prediction for intra luma block
@@ -1028,6 +1031,10 @@ void x264_predict_16x16_init( int cpu, x264_predict_t pf[7] )
         x264_predict_16x16_init_altivec( pf );
     }
 #endif
+
+#ifdef HAVE_ARMV6
+    x264_predict_16x16_init_arm( cpu, pf );
+#endif
 }
 
 void x264_predict_8x8c_init( int cpu, x264_predict_t pf[7] )
@@ -1050,6 +1057,10 @@ void x264_predict_8x8c_init( int cpu, x264_predict_t pf[7] )
         x264_predict_8x8c_init_altivec( pf );
     }
 #endif
+
+#ifdef HAVE_ARMV6
+    x264_predict_8x8c_init_arm( cpu, pf );
+#endif
 }
 
 void x264_predict_8x8_init( int cpu, x264_predict8x8_t pf[12], x264_predict_8x8_filter_t *predict_filter )
@@ -1071,6 +1082,10 @@ void x264_predict_8x8_init( int cpu, x264_predict8x8_t pf[12], x264_predict_8x8_
 #ifdef HAVE_MMX
     x264_predict_8x8_init_mmx( cpu, pf, predict_filter );
 #endif
+
+#ifdef HAVE_ARMV6
+    x264_predict_8x8_init_arm( cpu, pf, predict_filter );
+#endif
 }
 
 void x264_predict_4x4_init( int cpu, x264_predict_t pf[12] )
@@ -1090,6 +1105,10 @@ void x264_predict_4x4_init( int cpu, x264_predict_t pf[12] )
 
 #ifdef HAVE_MMX
     x264_predict_4x4_init_mmx( cpu, pf );
+#endif
+
+#ifdef HAVE_ARMV6
+    x264_predict_4x4_init_arm( cpu, pf );
 #endif
 }
 

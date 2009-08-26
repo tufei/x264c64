@@ -370,8 +370,8 @@ struct x264_t
     uint32_t nr_residual_sum[2][64];
     uint16_t nr_offset[2][64];
 #else
-    DECLARE_ALIGNED_16( uint32_t nr_residual_sum[2][64] );
-    DECLARE_ALIGNED_16( uint16_t nr_offset[2][64] );
+    ALIGNED_16( uint32_t nr_residual_sum[2][64] );
+    ALIGNED_16( uint16_t nr_offset[2][64] );
 #endif
     uint32_t        nr_count[2];
 
@@ -433,11 +433,11 @@ struct x264_t
         int16_t luma8x8[4][64];
         int16_t luma4x4[16+8][16];
 #else
-        DECLARE_ALIGNED_16( int16_t luma16x16_dc[16] );
-        DECLARE_ALIGNED_16( int16_t chroma_dc[2][4] );
+        ALIGNED_16( int16_t luma16x16_dc[16] );
+        ALIGNED_16( int16_t chroma_dc[2][4] );
         // FIXME share memory?
-        DECLARE_ALIGNED_16( int16_t luma8x8[4][64] );
-        DECLARE_ALIGNED_16( int16_t luma4x4[16+8][16] );
+        ALIGNED_16( int16_t luma8x8[4][64] );
+        ALIGNED_16( int16_t luma4x4[16+8][16] );
 #endif /* _TMS320C6400 */
     } dct;
 
@@ -518,7 +518,7 @@ struct x264_t
 #ifdef _TMS320C6400
         uint8_t i_sub_partition[4];
 #else
-        DECLARE_ALIGNED_4( uint8_t i_sub_partition[4] );
+        ALIGNED_4( uint8_t i_sub_partition[4] );
 #endif
         int     b_transform_8x8;
 
@@ -562,22 +562,22 @@ struct x264_t
             int16_t fenc_dct8[4][64];
             int16_t fenc_dct4[16][16];
 #else
-            DECLARE_ALIGNED_16( uint8_t fenc_buf[24*FENC_STRIDE] );
-            DECLARE_ALIGNED_16( uint8_t fdec_buf[27*FDEC_STRIDE] );
+            ALIGNED_16( uint8_t fenc_buf[24*FENC_STRIDE] );
+            ALIGNED_16( uint8_t fdec_buf[27*FDEC_STRIDE] );
 
             /* i4x4 and i8x8 backup data, for skipping the encode stage when possible */
-            DECLARE_ALIGNED_16( uint8_t i4x4_fdec_buf[16*16] );
-            DECLARE_ALIGNED_16( uint8_t i8x8_fdec_buf[16*16] );
-            DECLARE_ALIGNED_16( int16_t i8x8_dct_buf[3][64] );
-            DECLARE_ALIGNED_16( int16_t i4x4_dct_buf[15][16] );
+            ALIGNED_16( uint8_t i4x4_fdec_buf[16*16] );
+            ALIGNED_16( uint8_t i8x8_fdec_buf[16*16] );
+            ALIGNED_16( int16_t i8x8_dct_buf[3][64] );
+            ALIGNED_16( int16_t i4x4_dct_buf[15][16] );
             uint32_t i4x4_nnz_buf[4];
             uint32_t i8x8_nnz_buf[4];
             int i4x4_cbp;
             int i8x8_cbp;
 
             /* Psy trellis DCT data */
-            DECLARE_ALIGNED_16( int16_t fenc_dct8[4][64] );
-            DECLARE_ALIGNED_16( int16_t fenc_dct4[16][16] );
+            ALIGNED_16( int16_t fenc_dct8[4][64] );
+            ALIGNED_16( int16_t fenc_dct4[16][16] );
 #endif /* _TMS320C6400 */
 
             /* Psy RD SATD scores */
@@ -627,18 +627,18 @@ struct x264_t
             int16_t pskip_mv[2];
 #else
             /* -1 if unused, -2 if unavailable */
-            DECLARE_ALIGNED_4( int8_t ref[2][X264_SCAN8_SIZE] );
+            ALIGNED_4( int8_t ref[2][X264_SCAN8_SIZE] );
 
             /* 0 if not available */
-            DECLARE_ALIGNED_16( int16_t mv[2][X264_SCAN8_SIZE][2] );
-            DECLARE_ALIGNED_8( int16_t mvd[2][X264_SCAN8_SIZE][2] );
+            ALIGNED_16( int16_t mv[2][X264_SCAN8_SIZE][2] );
+            ALIGNED_8( int16_t mvd[2][X264_SCAN8_SIZE][2] );
 
             /* 1 if SKIP or DIRECT. set only for B-frames + CABAC */
-            DECLARE_ALIGNED_4( int8_t skip[X264_SCAN8_SIZE] );
+            ALIGNED_4( int8_t skip[X264_SCAN8_SIZE] );
 
-            DECLARE_ALIGNED_16( int16_t direct_mv[2][X264_SCAN8_SIZE][2] );
-            DECLARE_ALIGNED_4( int8_t  direct_ref[2][X264_SCAN8_SIZE] );
-            DECLARE_ALIGNED_4( int16_t pskip_mv[2] );
+            ALIGNED_16( int16_t direct_mv[2][X264_SCAN8_SIZE][2] );
+            ALIGNED_4( int8_t  direct_ref[2][X264_SCAN8_SIZE] );
+            ALIGNED_4( int16_t pskip_mv[2] );
 #endif /* _TMS320C6400 */
 
             /* number of neighbors (top and left) that used 8x8 dct */

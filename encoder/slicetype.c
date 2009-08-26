@@ -298,7 +298,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     int16_t (*fenc_mvs[2])[2] = { &frames[b]->lowres_mvs[0][b-p0-1][i_mb_xy], &frames[b]->lowres_mvs[1][p1-b-1][i_mb_xy] };
     int (*fenc_costs[2]) = { &frames[b]->lowres_mv_costs[0][b-p0-1][i_mb_xy], &frames[b]->lowres_mv_costs[1][p1-b-1][i_mb_xy] };
 
-    DECLARE_ALIGNED_8( uint8_t pix1[9*FDEC_STRIDE] );
+    ALIGNED_8( uint8_t pix1[9*FDEC_STRIDE] );
     uint8_t *pix2 = pix1+8;
     x264_me_t m[2];
     int i_bcost = COST_MAX;
@@ -388,7 +388,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
         {
             int i_mvc = 0;
             int16_t (*fenc_mv)[2] = fenc_mvs[l];
-            DECLARE_ALIGNED_4( int16_t mvc[4][2] );
+            ALIGNED_4( int16_t mvc[4][2] );
 
             /* Reverse-order MV prediction. */
             *(uint32_t*)mvc[0] = 0;
@@ -436,7 +436,7 @@ lowres_intra_mb:
         int i_icost, b_intra;
         if( !fenc->b_intra_calculated )
         {
-            DECLARE_ALIGNED_16( uint8_t edge[33] );
+            ALIGNED_ARRAY_16( uint8_t, edge,[33] );
             uint8_t *pix = &pix1[8+FDEC_STRIDE - 1];
             uint8_t *src = &fenc->lowres[0][i_pel_offset - 1];
             const int intra_penalty = 5;
@@ -1267,16 +1267,13 @@ int x264_rc_analyse_slice( x264_t *h )
     frames[p0] = h->fref0[0];
     frames[b] = h->fenc;
 
-    if( h->param.rc.b_mb_tree )
-        cost = x264_slicetype_frame_cost_recalculate( h, frames, p0, p1, b );
-    else
-    {
-        cost = x264_slicetype_frame_cost( h, &a, frames, p0, p1, b, 0 );
+    cost = x264_slicetype_frame_cost( h, &a, frames, p0, p1, b, 0 );
 
-        /* In AQ, use the weighted score instead. */
-        if( h->param.rc.i_aq_mode )
-            cost = frames[b]->i_cost_est_aq[b-p0][p1-b];
-    }
+    if( h->param.rc.b_mb_tree && !h->param.rc.b_stat_read )
+        cost = x264_slicetype_frame_cost_recalculate( h, frames, p0, p1, b );
+    /* In AQ, use the weighted score instead. */
+    else if( h->param.rc.i_aq_mode )
+        cost = frames[b]->i_cost_est_aq[b-p0][p1-b];
 
     h->fenc->i_row_satd = h->fenc->i_row_satds[b-p0][p1-b];
     h->fdec->i_row_satd = h->fdec->i_row_satds[b-p0][p1-b];

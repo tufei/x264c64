@@ -50,7 +50,7 @@ typedef struct
     int f8_bits_encoded;
 #else
     /* aligned for memcpy_aligned starting here */
-    DECLARE_ALIGNED_16( int f8_bits_encoded ); // only if using x264_cabac_size_decision()
+    ALIGNED_16( int f8_bits_encoded ); // only if using x264_cabac_size_decision()
 #endif
 
     /* context */

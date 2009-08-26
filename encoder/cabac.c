@@ -436,7 +436,7 @@ static int16_t mvp[2];
 static NOINLINE uint32_t x264_cabac_mb_mvd( x264_t *h, x264_cabac_t *cb, int i_list, int idx, int width )
 {
 #ifndef _TMS320C6400
-    DECLARE_ALIGNED_4( int16_t mvp[2] );
+    ALIGNED_4( int16_t mvp[2] );
 #endif
     uint32_t amvd;
     int mdx, mdy;

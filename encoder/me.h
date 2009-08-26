@@ -43,7 +43,7 @@ typedef struct
 #ifdef _TMS320C6400
     int16_t mvp[2];
 #else
-    DECLARE_ALIGNED_4( int16_t mvp[2] );
+    ALIGNED_4( int16_t mvp[2] );
 #endif
 
     /* output */
@@ -54,8 +54,8 @@ typedef struct
 } x264_me_t;
 #pragma STRUCT_ALIGN(x264_me_t, 16);
 #else
-    DECLARE_ALIGNED_4( int16_t mv[2] );
-} DECLARE_ALIGNED_16( x264_me_t );
+    ALIGNED_4( int16_t mv[2] );
+} ALIGNED_16( x264_me_t );
 #endif
 
 typedef struct {

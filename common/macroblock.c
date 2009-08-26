@@ -279,7 +279,7 @@ static int x264_mb_predict_mv_direct16x16_spatial( x264_t *h )
 {
     int ref[2];
 #ifndef _TMS320C6400
-    DECLARE_ALIGNED_8( int16_t mv[2][2] );
+    ALIGNED_8( int16_t mv[2][2] );
 #endif
     int i_list;
     int i8;
@@ -631,8 +631,8 @@ static inline void x264_mb_mc_01xywh( x264_t *h, int x, int y, int width, int he
     int       i_mode = x264_size2pixel[height][width];
     int       i_stride0 = 16, i_stride1 = 16;
 #ifndef _TMS320C6400
-    DECLARE_ALIGNED_16( uint8_t tmp0[16*16] );
-    DECLARE_ALIGNED_16( uint8_t tmp1[16*16] );
+    ALIGNED_ARRAY_16( uint8_t, tmp0,[16*16] );
+    ALIGNED_ARRAY_16( uint8_t, tmp1,[16*16] );
 #endif
     uint8_t *src0, *src1;
 
