@@ -369,10 +369,6 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
     }
     else if( i_mb_type == P_L0 )
     {
-#ifndef _TMS320C6400
-    	ALIGNED_4( int16_t mvp[2] );
-#endif
-
         if( h->mb.i_partition == D_16x16 )
         {
             bs_write1( s, 1 );
@@ -469,9 +465,6 @@ void x264_macroblock_write_cavlc( x264_t *h, bs_t *s )
         /* All B mode */
         /* Motion Vector */
         int i_list;
-#ifndef _TMS320C6400
-    	ALIGNED_4( int16_t mvp[2] );
-#endif
         const uint8_t (*b_list)[2] = x264_mb_type_list_table[i_mb_type];
 
         bs_write_ue( s, mb_type_b_to_golomb[ h->mb.i_partition - D_16x8 ][ i_mb_type - B_L0_L0 ] );
