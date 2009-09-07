@@ -167,9 +167,16 @@ extern const float x264_log2_lz_lut[32];
  * qp to qscale. */
 static ALWAYS_INLINE int x264_exp2fix8( float x )
 {
+#ifndef _TMS320C6400
     if( x >= 512.f/6.f ) return 0;
     if( x <= -512.f/6.f ) return 0xffff;
     int i = x*(-64.f/6.f) + 512;
+#else
+    int i;
+    if( x >= 512.f/6.f ) return 0;
+    if( x <= -512.f/6.f ) return 0xffff;
+    i = x*(-64.f/6.f) + 512;
+#endif
     return (x264_exp2_lut[i&63]+256) << (i>>6) >> 8;
 }
 
@@ -356,7 +363,7 @@ struct x264_t
     const uint8_t   *chroma_qp_table; /* includes both the nonlinear luma->chroma mapping and chroma_qp_offset */
 
 #ifdef _TMS320C6400
-    uint32_t dummy[2];  /* hack to satisfy alignment */
+    uint32_t dummy[3];  /* hack to satisfy alignment */
     uint32_t nr_residual_sum[2][64];
     uint16_t nr_offset[2][64];
 #else
@@ -412,7 +419,7 @@ struct x264_t
     struct
     {
 #ifdef _TMS320C6400
-        uint32_t dummy[1];  /* hack to satisfy alignment */
+        uint32_t dummy[3];  /* hack to satisfy alignment */
         int16_t luma16x16_dc[16];
         int16_t chroma_dc[2][4];
         // FIXME share memory?
@@ -531,7 +538,7 @@ struct x264_t
 #define FENC_STRIDE 16
 #define FDEC_STRIDE 32
 #ifdef _TMS320C6400
-            uint32_t dummy; /* alignment */
+//            uint32_t dummy[3]; /* alignment */
             uint8_t fenc_buf[24*FENC_STRIDE];
             uint8_t fdec_buf[27*FDEC_STRIDE];
 

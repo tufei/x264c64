@@ -342,6 +342,9 @@ fail:
 
 static int x264_validate_parameters( x264_t *h )
 {
+#ifdef _TMS320C6400
+    int max_slices = (h->param.i_height+((16<<h->param.b_interlaced)-1))/(16<<h->param.b_interlaced);
+#endif
 #ifdef HAVE_MMX
     if( !(x264_cpu_detect() & X264_CPU_SSE) )
     {
@@ -471,7 +474,9 @@ static int x264_validate_parameters( x264_t *h )
                   h->param.i_width, h->param.i_height );
     }
 
+#ifndef _TMS320C6400
     int max_slices = (h->param.i_height+((16<<h->param.b_interlaced)-1))/(16<<h->param.b_interlaced);
+#endif
     h->param.i_slice_count = x264_clip3( h->param.i_slice_count, 0, max_slices );
     h->param.i_slice_max_size = X264_MAX( h->param.i_slice_max_size, 0 );
     h->param.i_slice_max_mbs = X264_MAX( h->param.i_slice_max_mbs, 0 );
@@ -1311,6 +1316,10 @@ static int x264_slice_write( x264_t *h )
 
     while( (mb_xy = i_mb_x + i_mb_y * h->sps->i_mb_width) <= h->sh.i_last_mb )
     {
+#ifdef _TMS320C6400
+        int total_bits;
+        int mb_size;
+#endif
         int mb_spos = bs_pos(&h->out.bs) + x264_cabac_pos(&h->cabac);
         if( h->param.i_slice_max_size > 0 )
         {
@@ -1379,8 +1388,13 @@ static int x264_slice_write( x264_t *h )
             }
         }
 
+#ifndef _TMS320C6400
         int total_bits = bs_pos(&h->out.bs) + x264_cabac_pos(&h->cabac);
         int mb_size = total_bits - mb_spos;
+#else
+        total_bits = bs_pos(&h->out.bs) + x264_cabac_pos(&h->cabac);
+        mb_size = total_bits - mb_spos;
+#endif
 
         /* We'll just re-encode this last macroblock if we go over the max slice size. */
         if( total_bits - starting_bits > slice_max_size && !h->mb.b_reencode_mb )
@@ -1551,10 +1565,19 @@ static void *x264_slices_write( x264_t *h )
             h->sh.i_last_mb = h->sh.i_first_mb + h->param.i_slice_max_mbs - 1;
         else if( h->param.i_slice_count )
         {
+#ifdef _TMS320C6400
+            double height;
+            int width;
+#endif
             x264_emms();
             i_slice_num++;
+#ifndef _TMS320C6400
             double height = h->sps->i_mb_height >> h->param.b_interlaced;
             int width = h->sps->i_mb_width << h->param.b_interlaced;
+#else
+            height = h->sps->i_mb_height >> h->param.b_interlaced;
+            width = h->sps->i_mb_width << h->param.b_interlaced;
+#endif
             h->sh.i_last_mb = (int)(height * i_slice_num / h->param.i_slice_count + 0.5) * width - 1;
         }
         h->sh.i_last_mb = X264_MIN( h->sh.i_last_mb, h->mb.i_mb_count - 1 );

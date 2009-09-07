@@ -38,7 +38,12 @@ void     x264_cpu_mask_misalign_sse( void );
 int x264_stack_align( void (*func)(), ... );
 #define x264_stack_align(func,...) x264_stack_align((void (*)())func, __VA_ARGS__)
 #else
+#ifndef _TMS320C6400
 #define x264_stack_align(func,...) func(__VA_ARGS__)
+#else
+#define x264_stack_align(func, arg0) func(arg0)
+#define x264_stack_align2(func, arg0, arg1) func(arg0, arg1)
+#endif /* _TMS320C6400 */
 #endif
 
 typedef struct {

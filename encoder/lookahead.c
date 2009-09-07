@@ -83,7 +83,11 @@ static void x264_lookahead_slicetype_decide( x264_t *h )
 
     /* For MB-tree and VBV lookahead, we have to perform propagation analysis on I-frames too. */
     if( h->lookahead->b_analyse_keyframe && IS_X264_TYPE_I( h->lookahead->last_nonb->i_type ) )
+#ifndef _TMS320C6400
         x264_stack_align( x264_slicetype_analyse, h, 1 );
+#else
+        x264_stack_align2( x264_slicetype_analyse, h, 1 );
+#endif
 
     x264_pthread_mutex_unlock( &h->lookahead->ofbuf.mutex );
 }
@@ -129,8 +133,14 @@ static void x264_lookahead_thread( x264_t *h )
 int x264_lookahead_init( x264_t *h, int i_slicetype_length )
 {
     x264_lookahead_t *look;
+#ifndef _TMS320C6400
     CHECKED_MALLOCZERO( look, sizeof(x264_lookahead_t) );
     int i;
+#else
+    int i;
+    x264_t *look_h;
+    CHECKED_MALLOCZERO( look, sizeof(x264_lookahead_t) );
+#endif
     for( i = 0; i < h->param.i_threads; i++ )
         h->thread[i]->lookahead = look;
 
@@ -148,7 +158,11 @@ int x264_lookahead_init( x264_t *h, int i_slicetype_length )
     if( !h->param.i_sync_lookahead )
         return 0;
 
+#ifndef _TMS320C6400
     x264_t *look_h = h->thread[h->param.i_threads];
+#else
+    look_h = h->thread[h->param.i_threads];
+#endif
     *look_h = *h;
     if( x264_macroblock_cache_init( look_h ) )
         goto fail;
@@ -232,6 +246,9 @@ static void x264_lookahead_encoder_shift( x264_t *h )
 
 void x264_lookahead_get_frames( x264_t *h )
 {
+#ifdef _TMS320C6400
+        int bframes=0;
+#endif
     if( h->param.i_sync_lookahead )
     {   /* We have a lookahead thread, so get frames from there */
         x264_pthread_mutex_lock( &h->lookahead->ofbuf.mutex );
@@ -248,7 +265,9 @@ void x264_lookahead_get_frames( x264_t *h )
 
         x264_stack_align( x264_slicetype_decide, h );
 
+#ifndef _TMS320C6400
         int bframes=0;
+#endif
         while( IS_X264_TYPE_B( h->lookahead->next.list[bframes]->i_type ) )
             bframes++;
 
@@ -257,7 +276,11 @@ void x264_lookahead_get_frames( x264_t *h )
 
         /* For MB-tree and VBV lookahead, we have to perform propagation analysis on I-frames too. */
         if( h->lookahead->b_analyse_keyframe && IS_X264_TYPE_I( h->lookahead->last_nonb->i_type ) )
+#ifndef _TMS320C6400
             x264_stack_align( x264_slicetype_analyse, h, 1 );
+#else
+            x264_stack_align2( x264_slicetype_analyse, h, 1 );
+#endif
 
         x264_lookahead_encoder_shift( h );
     }

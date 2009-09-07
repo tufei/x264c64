@@ -206,7 +206,9 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     if( b_bidir && ( _mem4(m[0].mv) || _mem4(m[1].mv) ) )
         TRY_BIDIR( m[0].mv, m[1].mv, 5 );
 
-    frames[b]->lowres_inter_types[b-p0][p1-b][i_mb_xy] = list_used;
+    /* Store to width-2 bitfield. */
+    frames[b]->lowres_inter_types[b-p0][p1-b][i_mb_xy>>2] &= ~(3<<((i_mb_xy&3)*2));
+    frames[b]->lowres_inter_types[b-p0][p1-b][i_mb_xy>>2] |= list_used<<((i_mb_xy&3)*2);
 
 lowres_intra_mb:
     /* forbid intra-mbs in B-frames, because it's rare and not worth checking */
@@ -677,6 +679,7 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
     int *buf = h->scratch_buffer;
     int16_t (*mvs[2])[2];
+    int bipred_weights[2];
 
     refs[0] = frames[p0];
     refs[1] = frames[p1];
@@ -684,6 +687,8 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     ref_costs[1] = frames[p1]->i_propagate_cost;
     mvs[0] = frames[b]->lowres_mvs[0][b-p0-1];
     mvs[1] = frames[b]->lowres_mvs[1][p1-b-1];
+    bipred_weights[0] = i_bipred_weight;
+    bipred_weights[1] = 64 - i_bipred_weight;
 #endif
 
     for( h->mb.i_mb_y = 0; h->mb.i_mb_y < h->sps->i_mb_height; h->mb.i_mb_y++ )
@@ -980,8 +985,6 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
     int i_mb_count = NUM_MBS;
     int cost1p0, cost2p0, cost1b1, cost2p1;
     int i_max_search = X264_MIN( h->lookahead->next.i_size, X264_LOOKAHEAD_MAX );
-    if( h->param.b_deterministic )
-        i_max_search = X264_MIN( i_max_search, h->lookahead->i_slicetype_length + !keyframe );
 
 #ifdef _TMS320C6400
     char best_paths[X264_LOOKAHEAD_MAX][X264_LOOKAHEAD_MAX];
@@ -993,6 +996,9 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
 
     memset(frames, 0, sizeof(frames));
 #endif
+
+    if( h->param.b_deterministic )
+        i_max_search = X264_MIN( i_max_search, h->lookahead->i_slicetype_length + !keyframe );
 
     assert( h->frames.b_have_lowres );
 

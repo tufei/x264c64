@@ -14,13 +14,12 @@ Config="Release"
 [Source Files]
 Source="..\..\C6000\cgtools\lib\rts6400.lib"
 Source="..\..\C6000\csl\lib\csl6416.lib"
-Source="common\c64\ivt.s"
-Source="common\c64\timer.c"
 Source="Debug\common.lib"
 Source="encoder\analyse.c"
 Source="encoder\cabac.c"
 Source="encoder\cavlc.c"
 Source="encoder\encoder.c"
+Source="encoder\lookahead.c"
 Source="encoder\macroblock.c"
 Source="encoder\me.c"
 Source="encoder\ratecontrol.c"
@@ -36,29 +35,46 @@ Source="x264.cmd"
 Options=-g -pden -pds230 -pds552 -pds179 -pds69 -pds427 -pds77 -fr"$(Proj_dir)\Debug" -i"C:\CCStudio_v3.1\C6000\csl\include" -i"C:\CCStudio_v3.1\MyProjects\x264" -i"C:\CCStudio_v3.1\MyProjects\x264\common" -d"_DEBUG" -d"CHIP_6416" -d"HAVE_STDINT_H" -d"HAVE_STRING_H" -d"HAVE_MALLOC_H" -mv6400
 
 ["Compiler" Settings: "Release"]
-Options=-o3 -fr"$(Proj_dir)\Release" -mv6400
+Options=-pden -pds230 -pds552 -pds179 -pds69 -pds427 -pds77 -o3 -fr"$(Proj_dir)\Release" -i"C:\CCStudio_v3.1\C6000\csl\include" -i"C:\CCStudio_v3.1\MyProjects\x264" -i"C:\CCStudio_v3.1\MyProjects\x264\common" -d"_DEBUG" -d"CHIP_6416" -d"HAVE_STDINT_H" -d"HAVE_STRING_H" -d"HAVE_MALLOC_H" -mv6400
 
 ["Linker" Settings: "Debug"]
 Options=-a -c -m".\Debug\x264.map" -o".\Debug\x264.out" -w -i"C:\CCStudio_v3.1\C6000\cgtools\lib" -i"C:\CCStudio_v3.1\C6000\csl\lib" -i"C:\CCStudio_v3.1\MyProjects\x264\Debug" -l"common.lib" -l"rts6400.lib" -l"csl6416.lib"
 
 ["Linker" Settings: "Release"]
-Options=-c -m".\Release\x264.map" -o".\Release\x264.out" -w -x
+Options=-c -m".\Release\x264.map" -o".\Release\x264.out" -w -x -i"C:\CCStudio_v3.1\C6000\cgtools\lib" -i"C:\CCStudio_v3.1\C6000\csl\lib" -i"C:\CCStudio_v3.1\MyProjects\x264\Release" -l"common.lib" -l"rts6400.lib" -l"csl6416.lib"
 
 ["encoder\analyse.c" Settings: "Debug"]
 LinkOrder=2
 
+["encoder\analyse.c" Settings: "Release"]
+LinkOrder=2
+Options="Compiler" +{-o1} -{-o3}
+
 ["encoder\cabac.c" Settings: "Debug"]
+LinkOrder=3
+
+["encoder\cabac.c" Settings: "Release"]
 LinkOrder=3
 
 ["encoder\encoder.c" Settings: "Debug"]
 LinkOrder=4
 
+["encoder\encoder.c" Settings: "Release"]
+LinkOrder=4
+
 ["encoder\macroblock.c" Settings: "Debug"]
 LinkOrder=5
+
+["encoder\macroblock.c" Settings: "Release"]
+LinkOrder=5
+Options="Compiler" +{-o1} -{-o3}
+
+["encoder\me.c" Settings: "Release"]
+Options="Compiler" +{-k -al -o2} -{-o3}
 
 ["x264.c" Settings: "Debug"]
 LinkOrder=1
 
-["x264.cmd" Settings: "Release"]
+["x264.c" Settings: "Release"]
 LinkOrder=1
 
