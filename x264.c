@@ -276,6 +276,10 @@ static void Help( x264_param_t *defaults, int b_longhelp )
     H1( "      --no-deblock            Disable loop filter\n" );
     H0( "  -f, --deblock <alpha:beta>  Loop filter AlphaC0 and Beta parameters [%d:%d]\n",
                                        defaults->i_deblocking_filter_alphac0, defaults->i_deblocking_filter_beta );
+    H1( "      --slices <integer>      Number of slices per frame; forces rectangular\n"
+        "                              slices and is overridden by other slicing options\n" );
+    H1( "      --slice-max-size <integer> Limit the size of each slice in bytes\n");
+    H1( "      --slice-max-mbs <integer> Limit the size of each slice in macroblocks\n");
     H0( "      --interlaced            Enable pure-interlaced mode\n" );
     H0( "\n" );
     H0( "Ratecontrol:\n" );
@@ -309,7 +313,7 @@ static void Help( x264_param_t *defaults, int b_longhelp )
         "                                  - 3: Nth pass, overwrites stats file\n" );
     H0( "      --stats <string>        Filename for 2 pass stats [\"%s\"]\n", defaults->rc.psz_stat_out );
     H0( "      --no-mbtree             Disable mb-tree ratecontrol.\n");
-    H0( "      --qcomp <float>         QP curve compression: 0.0 => CBR, 1.0 => CQP [%.2f]\n", defaults->rc.f_qcompress );
+    H1( "      --qcomp <float>         QP curve compression [%.2f]\n", defaults->rc.f_qcompress );
     H1( "      --cplxblur <float>      Reduce fluctuations in QP (before curve compression) [%.1f]\n", defaults->rc.f_complexity_blur );
     H1( "      --qblur <float>         Reduce fluctuations in QP (after curve compression) [%.1f]\n", defaults->rc.f_qblur );
     H0( "      --zones <zone0>/<zone1>/...  Tweak the bitrate of some regions of the video\n" );
@@ -431,6 +435,7 @@ static void Help( x264_param_t *defaults, int b_longhelp )
     H0( "      --ssim                  Enable SSIM computation\n" );
     H0( "      --threads <integer>     Force a specific number of threads\n" );
     H1( "      --thread-input          Run Avisynth in its own thread\n" );
+    H1( "      --sync-lookahead <integer> Number of buffer frames for threaded lookahead\n" );
     H1( "      --non-deterministic     Slightly improve quality of SMP, at the cost of repeatability\n" );
     H1( "      --asm <integer>         Override CPU detection\n" );
     H1( "      --no-asm                Disable all CPU optimizations\n" );
@@ -539,7 +544,11 @@ static struct option long_options[] =
     { "zones",       required_argument, NULL, 0 },
     { "qpfile",      required_argument, NULL, OPT_QPFILE },
     { "threads",     required_argument, NULL, 0 },
+    { "slice-max-size",    required_argument, NULL, 0 },
+    { "slice-max-mbs",     required_argument, NULL, 0 },
+    { "slices",            required_argument, NULL, 0 },
     { "thread-input",      no_argument, NULL, OPT_THREAD_INPUT },
+    { "sync-lookahead",    required_argument, NULL, 0 },
     { "non-deterministic", no_argument, NULL, 0 },
     { "psnr",              no_argument, NULL, 0 },
     { "ssim",              no_argument, NULL, 0 },
@@ -1061,7 +1070,7 @@ generic_option:
 
 #ifdef HAVE_PTHREAD
     if( b_thread_input || param->i_threads > 1
-        || (param->i_threads == 0 && x264_cpu_num_processors() > 1) )
+        || (param->i_threads == X264_THREADS_AUTO && x264_cpu_num_processors() > 1) )
     {
         if( open_file_thread( NULL, &opt->hin, param ) )
         {
@@ -1110,13 +1119,13 @@ static void parse_qpfile( cli_opt_t *opt, x264_picture_t *pic, int i_frame )
     {
         file_pos = ftell( opt->qpfile );
         ret = fscanf( opt->qpfile, "%d %c %d\n", &num, &type, &qp );
-		if( num > i_frame || ret == EOF )
-		{
-			pic->i_type = X264_TYPE_AUTO;
-			pic->i_qpplus1 = 0;
-			fseek( opt->qpfile , file_pos , SEEK_SET );
-			break;
-		}
+        if( num > i_frame || ret == EOF )
+        {
+            pic->i_type = X264_TYPE_AUTO;
+            pic->i_qpplus1 = 0;
+            fseek( opt->qpfile , file_pos , SEEK_SET );
+            break;
+        }
         if( num < i_frame && ret == 3 )
             continue;
         pic->i_qpplus1 = qp+1;

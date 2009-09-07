@@ -103,4 +103,11 @@ if((y)<(x))\
     (f)=(e);\
 }
 
+#define COPY2_IF_GT(x,y,a,b)\
+if((y)>(x))\
+{\
+    (x)=(y);\
+    (a)=(b);\
+}
+
 #endif
