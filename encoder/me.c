@@ -209,8 +209,8 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
 
 #define CHECK_MVRANGE(mx,my) ( mx >= mv_x_min && mx <= mv_x_max && my >= mv_y_min && my <= mv_y_max )
 
-    const int16_t *p_cost_mvx = m->p_cost_mv - m->mvp[0];
-    const int16_t *p_cost_mvy = m->p_cost_mv - m->mvp[1];
+    const uint16_t *p_cost_mvx = m->p_cost_mv - m->mvp[0];
+    const uint16_t *p_cost_mvy = m->p_cost_mv - m->mvp[1];
 
     bmx = x264_clip3( m->mvp[0], mv_x_min*4, mv_x_max*4 );
     bmy = x264_clip3( m->mvp[1], mv_y_min*4, mv_y_max*4 );
@@ -374,8 +374,8 @@ me_hex2:
             int cross_start = 1;
 
 #ifdef _TMS320C6400
-            const int16_t *p_cost_omvx;
-            const int16_t *p_cost_omvy;
+            const uint16_t *p_cost_omvx;
+            const uint16_t *p_cost_omvy;
 #endif
             /* refine predictors */
             ucost1 = bcost;
@@ -478,8 +478,8 @@ me_hex2:
             p_cost_omvx = p_cost_mvx + omx*4;
             p_cost_omvy = p_cost_mvy + omy*4;
 #else
-            const int16_t *p_cost_omvx = p_cost_mvx + omx*4;
-            const int16_t *p_cost_omvy = p_cost_mvy + omy*4;
+            const uint16_t *p_cost_omvx = p_cost_mvx + omx*4;
+            const uint16_t *p_cost_omvy = p_cost_mvy + omy*4;
 #endif
             i = 1;
             do
@@ -598,7 +598,7 @@ me_hex2:
             int delta = x264_pixel_size[sad_size].w;
             int16_t *xs = h->scratch_buffer;
             int xn;
-            uint16_t *cost_fpel_mvx = x264_cost_mv_fpel[x264_lambda_tab[h->mb.i_qp]][-m->mvp[0]&3] + (-m->mvp[0]>>2);
+            uint16_t *cost_fpel_mvx = h->cost_mv_fpel[x264_lambda_tab[h->mb.i_qp]][-m->mvp[0]&3] + (-m->mvp[0]>>2);
 
             h->pixf.sad_x4[sad_size]( zero, p_fenc, p_fenc+delta,
                 p_fenc+delta*FENC_STRIDE, p_fenc+delta+delta*FENC_STRIDE,
@@ -926,8 +926,8 @@ static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_ite
 {
     const int bw = x264_pixel_size[m->i_pixel].w;
     const int bh = x264_pixel_size[m->i_pixel].h;
-    const int16_t *p_cost_mvx = m->p_cost_mv - m->mvp[0];
-    const int16_t *p_cost_mvy = m->p_cost_mv - m->mvp[1];
+    const uint16_t *p_cost_mvx = m->p_cost_mv - m->mvp[0];
+    const uint16_t *p_cost_mvy = m->p_cost_mv - m->mvp[1];
     const int i_pixel = m->i_pixel;
     const int b_chroma_me = h->mb.b_chroma_me && i_pixel <= PIXEL_8x8;
 
@@ -1279,10 +1279,10 @@ static void ALWAYS_INLINE x264_me_refine_bidir( x264_t *h, x264_me_t *m0, x264_m
     const int i_pixel = m0->i_pixel;
     const int bw = x264_pixel_size[i_pixel].w;
     const int bh = x264_pixel_size[i_pixel].h;
-    const int16_t *p_cost_m0x = m0->p_cost_mv - m0->mvp[0];
-    const int16_t *p_cost_m0y = m0->p_cost_mv - m0->mvp[1];
-    const int16_t *p_cost_m1x = m1->p_cost_mv - m1->mvp[0];
-    const int16_t *p_cost_m1y = m1->p_cost_mv - m1->mvp[1];
+    const uint16_t *p_cost_m0x = m0->p_cost_mv - m0->mvp[0];
+    const uint16_t *p_cost_m0y = m0->p_cost_mv - m0->mvp[1];
+    const uint16_t *p_cost_m1x = m1->p_cost_mv - m1->mvp[0];
+    const uint16_t *p_cost_m1y = m1->p_cost_mv - m1->mvp[1];
     ALIGNED_ARRAY_16( uint8_t, pixy_buf,[2],[9][16*16] );
     ALIGNED_8( uint8_t pixu_buf[2][9][8*8] );
     ALIGNED_8( uint8_t pixv_buf[2][9][8*8] );
@@ -1527,7 +1527,7 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
     static const int pixel_mv_offs[] = { 0, 4, 4*8, 0, 2, 2*8, 0 };
     int16_t *cache_mv = h->mb.cache.mv[i_list][x264_scan8[i4]];
     int16_t *cache_mv2 = cache_mv + pixel_mv_offs[m->i_pixel];
-    const int16_t *p_cost_mvx, *p_cost_mvy;
+    const uint16_t *p_cost_mvx, *p_cost_mvy;
     const int bw = x264_pixel_size[m->i_pixel].w>>2;
     const int bh = x264_pixel_size[m->i_pixel].h>>2;
     const int i_pixel = m->i_pixel;
@@ -1600,7 +1600,7 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
         }
     }
 
-    /* square refine, same as pattern as ME HEX. */
+    /* square refine, same pattern as ME HEX. */
     omx = bmx;
     omy = bmy;
     for( i=0; i<8; i++ ) COST_MV_SATD( omx + square1[i+1][0], omy + square1[i+1][1], satds[i], 1 );
