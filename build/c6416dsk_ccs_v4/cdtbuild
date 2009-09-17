@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?fileVersion 3.1.0?>
+
+<ManagedProjectBuildInfo>
+<project id="x264.com.ti.ccstudio.buildDefinitions.C6000.ProjectType.2128094214" name="C6000" projectType="com.ti.ccstudio.buildDefinitions.C6000.ProjectType">
+<configuration artifactExtension="out" artifactName="x264" description="" id="com.ti.ccstudio.buildDefinitions.C6000.Release.22875196" name="Release" parent="com.ti.ccstudio.buildDefinitions.C6000.Release">
+<toolChain id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.ReleaseToolchain.406943329" name="TI Code Generation Tools" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.ReleaseToolchain" targetTool="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerRelease.413643822">
+<option id="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION.429890084" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION" value="6.1.9" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS.1992927080" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS" valueType="stringList">
+<listOptionValue builtIn="false" value="DEVICE_CONFIGURATION_ID=com.ti.ccstudio.deviceModel.C6000.GenericC64xxDevice"/>
+<listOptionValue builtIn="false" value="DEVICE_ENDIANNESS=little"/>
+<listOptionValue builtIn="false" value="LINKER_COMMAND_FILE=C:\Documents and Settings\alex\My Documents\workspace\x264\x264.cmd"/>
+<listOptionValue builtIn="false" value="RUNTIME_SUPPORT_LIBRARY=rts6400.lib"/>
+<listOptionValue builtIn="false" value="IS_ASSEMBLY_ONLY=false"/>
+<listOptionValue builtIn="false" value="CCS_MBS_VERSION=4.0.2"/>
+<listOptionValue builtIn="false" value="PROJECT_KIND=com.ti.ccstudio.managedbuild.core.ProjectKind_Executable"/>
+</option>
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerRelease.1055068545" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerRelease">
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING.250512701" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING" valueType="stringList">
+<listOptionValue builtIn="false" value="225"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.SILICON_VERSION.661640495" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.SILICON_VERSION" value="6400" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.INCLUDE_PATH.2068728205" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.INCLUDE_PATH" valueType="includePath">
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
+</option>
+</tool>
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerRelease.413643822" name="C6000 Linker" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerRelease">
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.OUTPUT_FILE.947224956" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.OUTPUT_FILE" value="&quot;x264.out&quot;" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.MAP_FILE.213469761" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.MAP_FILE" value="&quot;x264.map&quot;" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.LIBRARY.561496541" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.LIBRARY" valueType="libs">
+<listOptionValue builtIn="false" value="&quot;rts6400.lib&quot;"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.SEARCH_PATH.777511262" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.SEARCH_PATH" valueType="stringList">
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/lib&quot;"/>
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
+</option>
+</tool>
+<macros/>
+</toolChain>
+</configuration>
+<configuration artifactExtension="out" artifactName="x264" description="" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180" name="Debug" parent="com.ti.ccstudio.buildDefinitions.C6000.Debug">
+<toolChain id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.DebugToolchain.1845629546" name="TI Code Generation Tools" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.DebugToolchain" targetTool="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerDebug.1740424771">
+<option id="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION.245768549" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION" value="6.1.9" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS.1251080080" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS" valueType="stringList">
+<listOptionValue builtIn="false" value="DEVICE_CONFIGURATION_ID=com.ti.ccstudio.deviceModel.C6000.GenericC64xxDevice"/>
+<listOptionValue builtIn="false" value="DEVICE_ENDIANNESS=little"/>
+<listOptionValue builtIn="false" value="LINKER_COMMAND_FILE=C:\Documents and Settings\alex\My Documents\workspace\x264\x264.cmd"/>
+<listOptionValue builtIn="false" value="RUNTIME_SUPPORT_LIBRARY=rts6400.lib"/>
+<listOptionValue builtIn="false" value="IS_ASSEMBLY_ONLY=false"/>
+<listOptionValue builtIn="false" value="CCS_MBS_VERSION=4.0.2"/>
+<listOptionValue builtIn="false" value="PROJECT_KIND=com.ti.ccstudio.managedbuild.core.ProjectKind_Executable"/>
+</option>
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug">
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.SILICON_VERSION.1122133729" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.SILICON_VERSION" value="6400" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.GCC.498106886" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.GCC" value="true" valueType="boolean"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DEFINE.963668055" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DEFINE" valueType="definedSymbols">
+<listOptionValue builtIn="false" value="CHIP_6416"/>
+<listOptionValue builtIn="false" value="HAVE_STDINT_H"/>
+<listOptionValue builtIn="false" value="HAVE_STRING_H"/>
+<listOptionValue builtIn="false" value="HAVE_MALLOC_H"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.INCLUDE_PATH.870277807" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.INCLUDE_PATH" valueType="includePath">
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
+<listOptionValue builtIn="false" value="&quot;C:\Documents and Settings\alex\My Documents\workspace\x264&quot;"/>
+<listOptionValue builtIn="false" value="&quot;C:\Documents and Settings\alex\My Documents\workspace\x264\common&quot;"/>
+<listOptionValue builtIn="false" value="&quot;C:\CCStudio_v3.1\C6000\csl\include&quot;"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING.1831994273" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING" valueType="stringList">
+<listOptionValue builtIn="false" value="225"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DISPLAY_ERROR_NUMBER.1877856543" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DISPLAY_ERROR_NUMBER" value="true" valueType="boolean"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_SUPPRESS.151983431" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_SUPPRESS" valueType="stringList">
+<listOptionValue builtIn="false" value="230"/>
+<listOptionValue builtIn="false" value="552"/>
+<listOptionValue builtIn="false" value="179"/>
+<listOptionValue builtIn="false" value="69"/>
+<listOptionValue builtIn="false" value="427"/>
+<listOptionValue builtIn="false" value="77"/>
+</option>
+</tool>
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerDebug.1740424771" name="C6000 Linker" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.linkerDebug">
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.OUTPUT_FILE.1020576038" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.OUTPUT_FILE" value="&quot;x264.out&quot;" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.MAP_FILE.1775824737" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.MAP_FILE" value="&quot;x264.map&quot;" valueType="string"/>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.LIBRARY.104554416" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.LIBRARY" valueType="libs">
+<listOptionValue builtIn="false" value="&quot;C:\CCStudio_v3.1\C6000\csl\lib\csl6416.lib&quot;"/>
+<listOptionValue builtIn="false" value="&quot;rts6400.lib&quot;"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.SEARCH_PATH.1097264472" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.linkerID.SEARCH_PATH" valueType="stringList">
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/lib&quot;"/>
+<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
+<listOptionValue builtIn="false" value="&quot;C:\CCStudio_v3.1\C6000\csl\lib&quot;"/>
+</option>
+</tool>
+<macros expandEnvironmentMacros="true"/>
+</toolChain>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/tools/checkasm.c" name="checkasm.c" rcbsApplicability="disable" resourcePath="/x264/tools/checkasm.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/checkasm.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/checkasm.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/tools/checkasm-a.asm" name="checkasm-a.asm" rcbsApplicability="disable" resourcePath="/x264/tools/checkasm-a.asm" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/checkasm-a.asm">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/checkasm-a.asm" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/tools/xyuv.c" name="xyuv.c" rcbsApplicability="disable" resourcePath="/x264/tools/xyuv.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/xyuv.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/tools/xyuv.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/encoder/rdo.c" name="rdo.c" rcbsApplicability="disable" resourcePath="/x264/encoder/rdo.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/encoder/rdo.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/encoder/rdo.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/encoder/slicetype.c" name="slicetype.c" rcbsApplicability="disable" resourcePath="/x264/encoder/slicetype.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/encoder/slicetype.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/encoder/slicetype.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/common/display-x11.c" name="display-x11.c" rcbsApplicability="disable" resourcePath="/x264/common/display-x11.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/display-x11.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/display-x11.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="true" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/common/visualize.c" name="visualize.c" rcbsApplicability="disable" resourcePath="/x264/common/visualize.c" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/visualize.c">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/visualize.c" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671"/>
+</resourceConfiguration>
+<resourceConfiguration exclude="false" id="com.ti.ccstudio.buildDefinitions.C6000.Debug.1121265180./x264/common/c64/ivt.s" name="ivt.s" rcbsApplicability="disable" resourcePath="/x264/common/c64/ivt.s" toolsToInvoke="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/c64/ivt.s">
+<tool id="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671./x264/common/c64/ivt.s" name="C6000 Compiler" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.exe.compilerDebug.611409671">
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DEFINE.1615779533" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DEFINE" valueType="definedSymbols">
+<listOptionValue builtIn="false" value="&quot;CHIP_6416&quot;"/>
+<listOptionValue builtIn="false" value="&quot;HAVE_STDINT_H&quot;"/>
+<listOptionValue builtIn="false" value="&quot;HAVE_STRING_H&quot;"/>
+<listOptionValue builtIn="false" value="&quot;HAVE_MALLOC_H&quot;"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING.872260325" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_WARNING" valueType="stringList">
+<listOptionValue builtIn="false" value="&quot;225&quot;"/>
+</option>
+<option id="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_SUPPRESS.108238606" superClass="com.ti.ccstudio.buildDefinitions.C6000_6.1.compilerID.DIAG_SUPPRESS" valueType="stringList">
+<listOptionValue builtIn="false" value="&quot;230&quot;"/>
+<listOptionValue builtIn="false" value="&quot;552&quot;"/>
+<listOptionValue builtIn="false" value="&quot;179&quot;"/>
+<listOptionValue builtIn="false" value="&quot;69&quot;"/>
+<listOptionValue builtIn="false" value="&quot;427&quot;"/>
+<listOptionValue builtIn="false" value="&quot;77&quot;"/>
+</option>
+</tool>
+</resourceConfiguration>
+</configuration>
+<macros/>
+</project>
+</ManagedProjectBuildInfo>

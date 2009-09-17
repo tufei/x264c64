@@ -27,8 +27,7 @@
                 .asg        b14, dp
                 .asg        b15, sp
           
-set_vector
-                .macro		addr
+set_vector      .macro		addr
                 stw			b0, *sp--
 ||              mvkl		addr, b0
                 mvkh		addr, b0

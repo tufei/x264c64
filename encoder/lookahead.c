@@ -83,10 +83,10 @@ static void x264_lookahead_slicetype_decide( x264_t *h )
 
     /* For MB-tree and VBV lookahead, we have to perform propagation analysis on I-frames too. */
     if( h->lookahead->b_analyse_keyframe && IS_X264_TYPE_I( h->lookahead->last_nonb->i_type ) )
-#ifndef _TMS320C6400
-        x264_stack_align( x264_slicetype_analyse, h, 1 );
-#else
+#if defined(_TMS320C6400) && (__TI_COMPILER_VERSION__ < TI_VARIADIC_MACRO_SUPPORT)
         x264_stack_align2( x264_slicetype_analyse, h, 1 );
+#else
+        x264_stack_align( x264_slicetype_analyse, h, 1 );
 #endif
 
     x264_pthread_mutex_unlock( &h->lookahead->ofbuf.mutex );
@@ -276,10 +276,10 @@ void x264_lookahead_get_frames( x264_t *h )
 
         /* For MB-tree and VBV lookahead, we have to perform propagation analysis on I-frames too. */
         if( h->lookahead->b_analyse_keyframe && IS_X264_TYPE_I( h->lookahead->last_nonb->i_type ) )
-#ifndef _TMS320C6400
-            x264_stack_align( x264_slicetype_analyse, h, 1 );
-#else
+#if defined(_TMS320C6400) && (__TI_COMPILER_VERSION__ < TI_VARIADIC_MACRO_SUPPORT)
             x264_stack_align2( x264_slicetype_analyse, h, 1 );
+#else
+            x264_stack_align( x264_slicetype_analyse, h, 1 );
 #endif
 
         x264_lookahead_encoder_shift( h );

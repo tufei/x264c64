@@ -41,8 +41,13 @@ int x264_stack_align( void (*func)(), ... );
 #ifndef _TMS320C6400
 #define x264_stack_align(func,...) func(__VA_ARGS__)
 #else
+#define TI_VARIADIC_MACRO_SUPPORT 6001000
+#if (__TI_COMPILER_VERSION__ >= TI_VARIADIC_MACRO_SUPPORT)
+#define x264_stack_align(func,...) func(__VA_ARGS__)
+#else
 #define x264_stack_align(func, arg0) func(arg0)
 #define x264_stack_align2(func, arg0, arg1) func(arg0, arg1)
+#endif
 #endif /* _TMS320C6400 */
 #endif
 

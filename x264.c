@@ -99,11 +99,15 @@ const char *main_arguments[] =
 {
     "x264.out",
     "--bitrate", "400",
-    "-b", "2",
     "-w",
     "--rc-lookahead", "1",
+    "-b", "2",
+    "--frames", "10",
+#if 0
     "-r", "2",
     "--mixed-refs",
+    "--profile", "baseline",
+#endif
     "-o", "suzie.264",
     "C:\\CCStudio_v3.1\\suzie_qcif.y4m"
 };
@@ -123,8 +127,8 @@ static int x264_init_platform(void)
     CSL_init();
 
     /* set up 256KB 4-way associative cache */
-    CACHE_setL2Mode(CACHE_256KCACHE);
     CACHE_reset();
+    CACHE_setL2Mode(CACHE_256KCACHE);
     CACHE_enableCaching(CACHE_EMIFA_CE00);
 
     if(c64_timer_init()) 
