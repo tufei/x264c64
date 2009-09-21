@@ -104,6 +104,7 @@ const char *main_arguments[] =
     "-b", "2",
     "--frames", "10",
 #if 0
+    "-t", "0",
     "-r", "2",
     "--mixed-refs",
     "--profile", "baseline",
