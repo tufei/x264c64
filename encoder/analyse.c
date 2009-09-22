@@ -264,17 +264,8 @@ int x264_analyse_init_costs( x264_t *h, int qp )
     h->cost_mv[lambda] += 2*4*2048;
     for( i = 0; i <= 2*4*2048; i++ )
     {
-#ifdef _TMS320C6400
-	float temp;
-
-	temp = log10f(i + 1) / log10f(2.0f); /* there is a bug in log2f() in C64 library */
-	temp = lambda * (temp * 2 + 0.718f + !!i) + .5f;
-        h->cost_mv[lambda][-i] =
-        h->cost_mv[lambda][i]  = temp;
-#else
         h->cost_mv[lambda][-i] =
         h->cost_mv[lambda][i]  = lambda * (log2f(i+1)*2 + 0.718f + !!i) + .5f;
-#endif
     }
     x264_pthread_mutex_lock( &cost_ref_mutex );
     for( i = 0; i < 3; i++ )
