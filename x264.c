@@ -138,8 +138,10 @@ static int x264_init_platform(void)
         return -1;
     }
     c64_timer_go();
+#if 0
     c64_timer_hold();
     fprintf(stdout, "x264 [info]: cycle counter go-hold overhead %llu cycles\n", c64_timer_read());
+#endif
     return 0;
 }
 

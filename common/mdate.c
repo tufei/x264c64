@@ -19,11 +19,14 @@
  *****************************************************************************/
 
 #ifdef _TMS320C6400
-#include <stdint.h>
+#include "timer.h"
+
+/* this is DSK6416 TMS320C6416T (1GHz) specific */
+#define CYCLES_PER_USEC 1000
 
 int64_t x264_mdate( void )
 {
-    return 0;
+    return (int64_t)c64_timer_read() / CYCLES_PER_USEC;
 }
 #else
 #if !(defined(_MSC_VER) || defined(__MINGW32__))
