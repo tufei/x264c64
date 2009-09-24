@@ -27,8 +27,12 @@
 #include <csl_timer.h>
 #include "timer.h"
 
+uint32_t profile_call_count = 0;
+uint64_t profile_overhead = 0;
+uint64_t profile_cycle_count = 0;
+
 #pragma DATA_ALIGN(cycle_counter, 8);
-static volatile uint32_t cycle_counter[2];
+static volatile near uint32_t cycle_counter[2];
 static TIMER_Handle h;
 
 uint64_t c64_timer_read(void) 

@@ -29,7 +29,7 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 #else
-#include "common/c64/timer.h"
+#include "timer.h"
 #include "extras/getopt.h"
 #include "extras/align_check.h"
 #include <stdint.h>
@@ -138,10 +138,15 @@ static int x264_init_platform(void)
         return -1;
     }
     c64_timer_go();
-#if 0
     c64_timer_hold();
     fprintf(stdout, "x264 [info]: cycle counter go-hold overhead %llu cycles\n", c64_timer_read());
-#endif
+
+    c64_timer_go();
+    profile_overhead = c64_timer_read();
+    profile_overhead = c64_timer_read() - profile_overhead;
+    c64_timer_hold();
+    fprintf(stdout, "x264 [info]: cycle counter read-read overhead %llu cycles\n", profile_overhead);
+
     return 0;
 }
 
@@ -201,7 +206,11 @@ int main( int argc, char **argv )
 #endif
 
 #ifdef _TMS320C6400
-    x264_close_platform(); 
+    x264_close_platform();
+    profile_cycle_count -= profile_call_count * profile_overhead;
+    fprintf(stdout, "x264 [info]: profiled code uses %llu cycles\n", profile_cycle_count);
+    fprintf(stdout, "x264 [info]: profiled code is called %u times\n", profile_call_count);
+    fprintf(stdout, "x264 [info]: profiled code uses %llu cycles in average\n", profile_cycle_count / profile_call_count);
 #endif
 
     return ret;
@@ -1197,6 +1206,9 @@ static int  Encode_frame( x264_t *h, hnd_t hout, x264_picture_t *pic )
         return -1;
     }
 
+#ifdef _TMS320C6400
+    c64_timer_hold();
+#endif
     for( i = 0; i < i_nal; i++ )
     {
         int i_size;
@@ -1219,6 +1231,9 @@ static int  Encode_frame( x264_t *h, hnd_t hout, x264_picture_t *pic )
     }
     if (i_nal)
         p_set_eop( hout, &pic_out );
+#ifdef _TMS320C6400
+    c64_timer_go();
+#endif
 
     return i_file;
 }
@@ -1229,6 +1244,9 @@ static void Print_status( int64_t i_start, int i_frame, int i_frame_total, int64
     int64_t i_elapsed = x264_mdate() - i_start;
     double fps = i_elapsed > 0 ? i_frame * 1000000. / i_elapsed : 0;
     double bitrate = (double) i_file * 8 * param->i_fps_num / ( (double) param->i_fps_den * i_frame * 1000 );
+#ifdef _TMS320C6400
+    c64_timer_hold();
+#endif
     if( i_frame_total )
     {
         int eta = i_elapsed * (i_frame_total - i_frame) / ((int64_t)i_frame * 1000000);
@@ -1242,6 +1260,7 @@ static void Print_status( int64_t i_start, int i_frame, int i_frame_total, int64
     }
 #ifdef _TMS320C6400
     fprintf( stderr, "%s  \n", buf+5 );
+    c64_timer_go();
 #else
     fprintf( stderr, "%s  \r", buf+5 );
     SetConsoleTitle( buf );
@@ -1291,17 +1310,33 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         return -1;
     }
 
+#ifdef _TMS320C6400
+    /*
+     * start cycle counter here, note that this is only for the DSK platform,
+     * so preferrably we should pause counting around file I/O operations,
+     * such as fopen(), fread(), fwrite(), fclose()
+     */
+    c64_timer_go();
+#endif
     i_start = x264_mdate();
 
     /* Encode frames */
 #ifdef _TMS320C6400
     for( i_frame = 0, i_file = 0, i_frame_output = 0; i_frame < i_frame_total || i_frame_total == 0; )
+    {
+        int ret_read;
+
+        c64_timer_hold();
+        ret_read = p_read_frame( &pic, opt->hin, i_frame + opt->i_seek );
+        c64_timer_go();
+        if( ret_read )
+            break;
 #else
     for( i_frame = 0, i_file = 0, i_frame_output = 0; b_ctrl_c == 0 && (i_frame < i_frame_total || i_frame_total == 0); )
-#endif
     {
         if( p_read_frame( &pic, opt->hin, i_frame + opt->i_seek ) )
             break;
+#endif
 
         pic.i_pts = (int64_t)i_frame * param->i_fps_den;
 
@@ -1344,6 +1379,9 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     }
 
     i_end = x264_mdate();
+#ifdef _TMS320C6400
+    c64_timer_hold();
+#endif
     x264_picture_clean( &pic );
     /* Erase progress indicator before printing encoding stats. */
     if( opt->b_progress )

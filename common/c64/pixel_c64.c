@@ -176,6 +176,7 @@ int name( uint8_t *pix, int i_stride )                      \
     uint32_t var = 0, sum = 0, sqr = 0;                     \
     const uint32_t unit = 0x01010101U;                      \
     int x, y;                                               \
+    uint64_t start = c64_timer_read();                      \
     for( y = 0; y < w; y++ )                                \
     {                                                       \
         for( x = 0; x < w; x +=4 )                          \
@@ -187,6 +188,8 @@ int name( uint8_t *pix, int i_stride )                      \
         pix += i_stride;                                    \
     }                                                       \
     var = sqr - (sum * sum >> shift);                       \
+    profile_cycle_count += c64_timer_read() - start;        \
+    profile_call_count++;                                   \
     return var;                                             \
 }
 

@@ -86,6 +86,12 @@ int strcasecmp(const char *s1, const char *s2);
 int strncasecmp(const char *s1, const char *s2, size_t n);
 #endif
 
+#ifdef _TMS320C6400
+extern uint32_t profile_call_count;
+extern uint64_t profile_overhead;
+extern uint64_t profile_cycle_count;
+#endif
+
 /****************************************************************************
  * Generals functions
  ****************************************************************************/
