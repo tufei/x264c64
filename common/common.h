@@ -111,7 +111,7 @@ extern uint64_t profile_cycle_count;
 #endif
 
 /****************************************************************************
- * Generals functions
+ * General functions
  ****************************************************************************/
 /* x264_malloc : will do or emulate a memalign
  * you have to use x264_free for buffers allocated with x264_malloc */
@@ -127,6 +127,8 @@ int64_t x264_mdate( void );
 /* x264_param2string: return a (malloced) string containing most of
  * the encoding options */
 char *x264_param2string( x264_param_t *p, int b_res );
+
+int x264_nal_encode( uint8_t *dst, int b_annexb, x264_nal_t *nal );
 
 /* log */
 void x264_log( x264_t *h, int i_level, const char *psz_fmt, ... );
@@ -280,8 +282,8 @@ typedef struct
 
 typedef struct x264_lookahead_t
 {
+    volatile uint8_t              b_exit_thread;
     uint8_t                       b_thread_active;
-    uint8_t                       b_exit_thread;
     uint8_t                       b_analyse_keyframe;
     int                           i_last_idr;
     int                           i_slicetype_length;
@@ -349,8 +351,10 @@ struct x264_t
         int         i_bitstream;    /* size of p_bitstream */
         uint8_t     *p_bitstream;   /* will hold data for all nal */
         bs_t        bs;
-        int         i_frame_size;
     } out;
+
+    uint8_t *nal_buffer;
+    int      nal_buffer_size;
 
     /**** thread synchronization starts here ****/
 
@@ -724,6 +728,7 @@ struct x264_t
             int i_mb_count_ref[2][32];
             int i_mb_partition[17];
             int i_mb_cbp[6];
+            int i_mb_pred_mode[3][13];
             /* Adaptive direct mv pred */
             int i_direct_score[2];
             /* Metrics */
@@ -751,6 +756,7 @@ struct x264_t
         int64_t i_mb_count_8x8dct[2];
         int64_t i_mb_count_ref[2][2][32];
         int64_t i_mb_cbp[6];
+        int64_t i_mb_pred_mode[3][13];
         /* */
         int     i_direct_score[2];
         int     i_direct_frames[2];
