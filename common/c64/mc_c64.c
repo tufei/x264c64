@@ -30,13 +30,32 @@ static inline void pixel_avg( uint8_t *dst,  int i_dst_stride,
 {
     int x, y;
 
-    if((i_width & 0x03) == 0)
+    if(!(i_width & 0x03))
     {
         for( y = 0; y < i_height; y++ )
         {
             for( x = 0; x < i_width; x += 4 )
             {
                 _mem4(&dst[x]) = _avgu4(_mem4_const(&src1[x]), _mem4_const(&src2[x]));
+            }
+            dst  += i_dst_stride;
+            src1 += i_src1_stride;
+            src2 += i_src2_stride;
+        }
+    }
+    else if(!(i_width & 0x07))
+    {
+        uint64_t pack1, pack2;
+        uint32_t hi4, lo4;
+        for( y = 0; y < i_height; y++ )
+        {
+            for( x = 0; x < i_width; x += 8 )
+            {
+                pack1 = _mem8_const(&src1[x]);
+                pack2 = _mem8_const(&src2[x]);
+                hi4 = _avgu4(_hill(pack1), _hill(pack2));
+                lo4 = _avgu4(_loll(pack1), _loll(pack2));
+                _mem8(&dst[x]) = _itoll(hi4, lo4);
             }
             dst  += i_dst_stride;
             src1 += i_src1_stride;
@@ -75,13 +94,32 @@ static inline void pixel_avg_wxh( uint8_t *dst, int i_dst, uint8_t *src1, int i_
             dst += i_dst;
         }
     }
-    else 
+    else if( width == 4 )
     {
         for( y = 0; y < height; y++ )
         {
             for( x = 0; x < width; x += 4 )
             {
                 _mem4(&dst[x]) = _avgu4(_mem4_const(&src1[x]), _mem4_const(&src2[x]));
+            }
+            src1 += i_src1;
+            src2 += i_src2;
+            dst += i_dst;
+        }
+    }
+    else
+    {
+        uint64_t pack1, pack2;
+        uint32_t hi4, lo4;
+        for( y = 0; y < height; y++ )
+        {
+            for( x = 0; x < width; x += 8 )
+            {
+                pack1 = _mem8_const(&src1[x]);
+                pack2 = _mem8_const(&src2[x]);
+                hi4 = _avgu4(_hill(pack1), _hill(pack2));
+                lo4 = _avgu4(_loll(pack1), _loll(pack2));
+                _mem8(&dst[x]) = _itoll(hi4, lo4);
             }
             src1 += i_src1;
             src2 += i_src2;

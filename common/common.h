@@ -59,6 +59,16 @@ do {\
 // 16 for the macroblock in progress + 3 for deblocking + 3 for motion compensation filter + 2 for extra safety
 #define X264_THREAD_HEIGHT 24
 
+#ifdef _TMS320C6400
+#define TI_PRAGMA_MACRO_SUPPORT 6000001
+#if (__TI_COMPILER_VERSION__ >= TI_PRAGMA_MACRO_SUPPORT)
+#define PRAGMA(x) _Pragma(#x)
+#define LOOP_COUNT_INFO(min, max, multiple) PRAGMA(MUST_ITERATE(min, max, multiple))
+#else
+#define LOOP_COUNT_INFO(min, max, multiple)
+#endif
+#endif /* _TMS320C6400 */
+
 /****************************************************************************
  * Includes
  ****************************************************************************/
@@ -87,6 +97,14 @@ int strncasecmp(const char *s1, const char *s2, size_t n);
 #endif
 
 #ifdef _TMS320C6400
+#include "timer.h"
+
+#define START_COUNTER \
+    uint64_t start = c64_timer_read();
+#define STOP_COUNTER \
+    profile_cycle_count += c64_timer_read() - start;        \
+    profile_call_count++;
+
 extern uint32_t profile_call_count;
 extern uint64_t profile_overhead;
 extern uint64_t profile_cycle_count;

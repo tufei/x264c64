@@ -898,7 +898,7 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
     INIT4( sad_x4, _vis );
 #endif
 
-#ifndef _TMS320C6400
+#ifdef _TMS320C6400
     INIT7( sad, _c64 );
     INIT7( sad_x3, _c64 );
     INIT7( sad_x4, _c64 );

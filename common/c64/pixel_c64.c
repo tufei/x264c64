@@ -25,7 +25,7 @@
 /***********************************************************************
  * SAD routines
  **********************************************************************/
-#define PIXEL_SAD_C64(name, lx, ly) \
+#define PIXEL_SAD_C64_4(name, lx, ly) \
 int name(uint8_t *pix1, int i_stride_pix1,                                  \
          uint8_t *pix2, int i_stride_pix2)                                  \
 {                                                                           \
@@ -46,18 +46,44 @@ int name(uint8_t *pix1, int i_stride_pix1,                                  \
     return i_sum;                                                           \
 }
 
-PIXEL_SAD_C64(x264_pixel_sad_16x16_c64, 16, 16)
-PIXEL_SAD_C64(x264_pixel_sad_8x16_c64,   8, 16)
-PIXEL_SAD_C64(x264_pixel_sad_16x8_c64,  16,  8)
-PIXEL_SAD_C64(x264_pixel_sad_8x8_c64,    8,  8)
-PIXEL_SAD_C64(x264_pixel_sad_8x4_c64,    8,  4)
-PIXEL_SAD_C64(x264_pixel_sad_4x8_c64,    4,  8)
-PIXEL_SAD_C64(x264_pixel_sad_4x4_c64,    4,  4)
+#define PIXEL_SAD_C64_8(name, lx, ly) \
+int name(uint8_t *pix1, int i_stride_pix1,                                  \
+         uint8_t *pix2, int i_stride_pix2)                                  \
+{                                                                           \
+    const uint32_t unit = 0x01010101U;                                      \
+    uint64_t pack1, pack2;                                                  \
+    uint32_t hi4, lo4;                                                      \
+    int i_sum = 0;                                                          \
+    int x, y;                                                               \
+    for(y = 0; y < ly; y++)                                                 \
+    {                                                                       \
+        for(x = 0; x < lx; x += 8)                                          \
+        {                                                                   \
+            pack1 = _mem8_const(&pix1[x]);                                  \
+            pack2 = _mem8_const(&pix2[x]);                                  \
+            hi4 = _subabs4(_hill(pack1), _hill(pack2));                     \
+            lo4 = _subabs4(_loll(pack1), _loll(pack2));                     \
+            i_sum += _dotpu4(hi4, unit);                                    \
+            i_sum += _dotpu4(lo4, unit);                                    \
+        }                                                                   \
+        pix1 += i_stride_pix1;                                              \
+        pix2 += i_stride_pix2;                                              \
+    }                                                                       \
+    return i_sum;                                                           \
+}
+
+PIXEL_SAD_C64_8(x264_pixel_sad_16x16_c64, 16, 16)
+PIXEL_SAD_C64_8(x264_pixel_sad_8x16_c64,   8, 16)
+PIXEL_SAD_C64_8(x264_pixel_sad_16x8_c64,  16,  8)
+PIXEL_SAD_C64_8(x264_pixel_sad_8x8_c64,    8,  8)
+PIXEL_SAD_C64_8(x264_pixel_sad_8x4_c64,    8,  4)
+PIXEL_SAD_C64_4(x264_pixel_sad_4x8_c64,    4,  8)
+PIXEL_SAD_C64_4(x264_pixel_sad_4x4_c64,    4,  4)
 
 /****************************************************************************
  * pixel_ssd_WxH
  ****************************************************************************/
-#define PIXEL_SSD_C64( name, lx, ly ) \
+#define PIXEL_SSD_C64_4( name, lx, ly ) \
 int name( uint8_t *pix1, int i_stride_pix1,                                 \
           uint8_t *pix2, int i_stride_pix2 )                                \
 {                                                                           \
@@ -77,13 +103,78 @@ int name( uint8_t *pix1, int i_stride_pix1,                                 \
     return i_sum;                                                           \
 }
 
-PIXEL_SSD_C64( x264_pixel_ssd_16x16_c64, 16, 16 )
-PIXEL_SSD_C64( x264_pixel_ssd_16x8_c64,  16,  8 )
-PIXEL_SSD_C64( x264_pixel_ssd_8x16_c64,   8, 16 )
-PIXEL_SSD_C64( x264_pixel_ssd_8x8_c64,    8,  8 )
-PIXEL_SSD_C64( x264_pixel_ssd_8x4_c64,    8,  4 )
-PIXEL_SSD_C64( x264_pixel_ssd_4x8_c64,    4,  8 )
-PIXEL_SSD_C64( x264_pixel_ssd_4x4_c64,    4,  4 )
+#define PIXEL_SSD_C64_8( name, lx, ly ) \
+int name( uint8_t *pix1, int i_stride_pix1,                                 \
+          uint8_t *pix2, int i_stride_pix2 )                                \
+{                                                                           \
+    int i_sum = 0;                                                          \
+    int x, y;                                                               \
+    uint64_t pack1, pack2;                                                  \
+    uint32_t hi4, lo4;                                                      \
+    for( y = 0; y < ly; y++ )                                               \
+    {                                                                       \
+        for( x = 0; x < lx; x += 8 )                                        \
+        {                                                                   \
+            pack1 = _mem8_const(&pix1[x]);                                  \
+            pack2 = _mem8_const(&pix2[x]);                                  \
+            hi4 = _subabs4(_hill(pack1), _hill(pack2));                     \
+            lo4 = _subabs4(_loll(pack1), _loll(pack2));                     \
+            i_sum += _dotpu4(hi4, hi4);                                     \
+            i_sum += _dotpu4(lo4, lo4);                                     \
+        }                                                                   \
+        pix1 += i_stride_pix1;                                              \
+        pix2 += i_stride_pix2;                                              \
+    }                                                                       \
+    return i_sum;                                                           \
+}
+
+PIXEL_SSD_C64_8( x264_pixel_ssd_16x16_c64, 16, 16 )
+PIXEL_SSD_C64_8( x264_pixel_ssd_16x8_c64,  16,  8 )
+PIXEL_SSD_C64_8( x264_pixel_ssd_8x16_c64,   8, 16 )
+PIXEL_SSD_C64_8( x264_pixel_ssd_8x8_c64,    8,  8 )
+PIXEL_SSD_C64_8( x264_pixel_ssd_8x4_c64,    8,  4 )
+PIXEL_SSD_C64_4( x264_pixel_ssd_4x8_c64,    4,  8 )
+PIXEL_SSD_C64_4( x264_pixel_ssd_4x4_c64,    4,  4 )
+
+#define HADAMARD4(d0,d1,d2,d3,s0,s1,s2,s3) {\
+    uint32_t t0 = _add2(s0, s1);\
+    uint32_t t1 = _sub2(s0, s1);\
+    uint32_t t2 = _add2(s2, s3);\
+    uint32_t t3 = _sub2(s2, s3);\
+    d0 = _add2(t0, t2);\
+    d2 = _sub2(t0, t2);\
+    d1 = _add2(t1, t3);\
+    d3 = _sub2(t1, t3);\
+}
+
+int x264_pixel_satd_4x4_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
+{
+    uint32_t tmp[4][2];
+    uint32_t a0,a1,a2,a3,b0,b1;
+    uint32_t unit = 0x00010001;
+    int sum=0, i;
+    for( i=0; i<4; i++, pix1+=i_pix1, pix2+=i_pix2 )
+    {
+        b0 = _mem4_const(pix1);
+        b1 = _mem4_const(pix2);
+        a0 = _unpklu4(b0); a1 = _unpkhu4(b0);
+        a2 = _unpklu4(b1); a3 = _unpkhu4(b1);
+        b0 = _sub2(a0, a2); b1 = _sub2(a1, a3);
+        a0 = _add2(b0, b1); a1 = _sub2(b0, b1);
+        b0 = _packlh2(a0, a0); b1 = _packlh2(a1, a1);
+        a0 = _dotp2(b0, unit); a1 = _dotpn2(b0, unit);
+        a2 = _dotp2(b1, unit); a3 = _dotpn2(b1, unit);
+        tmp[i][0] = _spack2(a1, a0);
+        tmp[i][1] = _spack2(a3, a2);
+    }
+    for( i=0; i<2; i++ )
+    {
+        HADAMARD4(a0, a1, a2, a3, tmp[0][i], tmp[1][i], tmp[2][i], tmp[3][i]);
+        a0 = _abs2(a0) + _abs2(a1) + _abs2(a2) + _abs2(a3);
+        sum += ((uint16_t)a0) + (a0>>16);
+    }
+    return sum >> 1;
+}
 
 /* 0x01 = '+', 0xFF = '-' */
 static const uint32_t sign_table[16] = 
@@ -165,7 +256,7 @@ PIXEL_SATD_C64( x264_pixel_satd_8x16_c64,   8, 16 )
 PIXEL_SATD_C64( x264_pixel_satd_8x8_c64,    8,  8 )
 PIXEL_SATD_C64( x264_pixel_satd_8x4_c64,    8,  4 )
 PIXEL_SATD_C64( x264_pixel_satd_4x8_c64,    4,  8 )
-PIXEL_SATD_C64( x264_pixel_satd_4x4_c64,    4,  4 )
+/*PIXEL_SATD_C64( x264_pixel_satd_4x4_c64,    4,  4 )*/
 
 /****************************************************************************
  * pixel_var_wxh
@@ -176,20 +267,19 @@ int name( uint8_t *pix, int i_stride )                      \
     uint32_t var = 0, sum = 0, sqr = 0;                     \
     const uint32_t unit = 0x01010101U;                      \
     int x, y;                                               \
-    uint64_t start = c64_timer_read();                      \
     for( y = 0; y < w; y++ )                                \
     {                                                       \
-        for( x = 0; x < w; x +=4 )                          \
+        for( x = 0; x < w; x += 8 )                         \
         {                                                   \
-            uint32_t data = _mem4_const(&pix[x]);           \
-            sum += _dotpu4(data, unit);                     \
-            sqr += _dotpu4(data, data);                     \
+            uint64_t data = _mem8_const(&pix[x]);           \
+            sum += _dotpu4(_loll(data), unit);              \
+            sum += _dotpu4(_hill(data), unit);              \
+            sqr += _dotpu4(_loll(data), _loll(data));       \
+            sqr += _dotpu4(_hill(data), _hill(data));       \
         }                                                   \
         pix += i_stride;                                    \
     }                                                       \
     var = sqr - (sum * sum >> shift);                       \
-    profile_cycle_count += c64_timer_read() - start;        \
-    profile_call_count++;                                   \
     return var;                                             \
 }
 
