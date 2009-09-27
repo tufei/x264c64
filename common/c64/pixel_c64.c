@@ -176,87 +176,53 @@ int x264_pixel_satd_4x4_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix
     return sum >> 1;
 }
 
-/* 0x01 = '+', 0xFF = '-' */
-static const uint32_t sign_table[16] = 
+int x264_pixel_satd_8x4_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
 {
-    0x01010101U, 0x010101FFU, 0x0101FF01U, 0x0101FFFFU,
-    0x01FF0101U, 0x01FF01FFU, 0x01FFFF01U, 0x01FFFFFFU,
-    0xFF010101U, 0xFF0101FFU, 0xFF01FF01U, 0xFF01FFFFU,
-    0xFFFF0101U, 0xFFFF01FFU, 0xFFFFFF01U, 0xFFFFFFFFU
-};
-
-/****************************************************************************
- * pixel_satd_WxH: sum of 4x4 Hadamard transformed differences
- ****************************************************************************/
-static int pixel_satd_wxh( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2, int i_width, int i_height )
-{
-    static const uint8_t hadamard_sign[4] = 
+    uint32_t tmp[4][4];
+    uint32_t a0,a1,a2,a3;
+    uint32_t b0,b1,b2,b3;
+    uint64_t d0, d1;
+    int sum=0, i;
+    for( i=0; i<4; i++, pix1+=i_pix1, pix2+=i_pix2 )
     {
-        0, /* + + + + */
-        5, /* + - + - */
-        3, /* + + - - */
-        6  /* + - - + */
-    };
-    int16_t tmp[4][4];
-    int x, y;
-    int i_satd = 0;
-
-    for( y = 0; y < i_height; y += 4 )
-    {
-        for( x = 0; x < i_width; x += 4 )
-        {
-            uint8_t *p1 = pix1 + x, *p2 = pix2 + x;
-            int i, s, sign;
-
-            for( i = 0; i < 4; i++, p1 += i_pix1, p2 += i_pix2 )
-            {
-                sign = _cmpgtu4(_mem4_const(p2), _mem4_const(p1));
-                s = _subabs4(_mem4_const(p1), _mem4_const(p2));
-                _mem4(tmp[i]) = _pack2(_dotpsu4(sign_table[sign ^ hadamard_sign[1]], s), 
-                    _dotpsu4(sign_table[sign ^ hadamard_sign[0]], s));
-                _mem4(&tmp[i][2]) = _pack2(_dotpsu4(sign_table[sign ^ hadamard_sign[3]], s), 
-                    _dotpsu4(sign_table[sign ^ hadamard_sign[2]], s));
-            }
-            for( i = 0; i < 4; i++ )
-            {
-                int16_t middle[4];
-                int pack;
-
-                middle[0] = tmp[0][i]; middle[1] = tmp[1][i];
-                middle[2] = tmp[2][i]; middle[3] = tmp[3][i];
-                pack = _add2(_mem4_const(middle), _mem4_const(&middle[2]));
-                i_satd += _abs(_ext(pack, 16, 16) + _ext(pack, 0, 16));
-
-                pack = _add2(_mem4_const(middle), _mem4_const(&middle[2]));
-                i_satd += _abs(_ext(pack, 16, 16) - _ext(pack, 0, 16));
-
-                pack = _sub2(_mem4_const(middle), _mem4_const(&middle[2]));
-                i_satd += _abs(_ext(pack, 16, 16) + _ext(pack, 0, 16));
-
-                pack = _sub2(_mem4_const(middle), _mem4_const(&middle[2]));
-                i_satd += _abs(_ext(pack, 16, 16) - _ext(pack, 0, 16));
-            }
-        }
-        pix1 += 4 * i_pix1;
-        pix2 += 4 * i_pix2;
+        d0 = _mem8_const(pix1); d1 = _mem8_const(pix2);
+        b0 = _sub2(_unpklu4(_loll(d0)), _unpklu4(_loll(d1)));
+        b1 = _sub2(_unpkhu4(_loll(d0)), _unpkhu4(_loll(d1)));
+        b2 = _sub2(_unpklu4(_hill(d0)), _unpklu4(_hill(d1)));
+        b3 = _sub2(_unpkhu4(_hill(d0)), _unpkhu4(_hill(d1)));
+        a0 = _pack2(b2, b0); a1 = _packh2(b2, b0);
+        a2 = _pack2(b3, b1); a3 = _packh2(b3, b1);
+        HADAMARD4( tmp[i][0], tmp[i][1], tmp[i][2], tmp[i][3], a0,a1,a2,a3 );
     }
-
-    return i_satd >> 1;
+    for( i=0; i<4; i++ )
+    {
+        HADAMARD4( a0,a1,a2,a3, tmp[0][i], tmp[1][i], tmp[2][i], tmp[3][i] );
+        sum += _abs2(a0) + _abs2(a1) + _abs2(a2) + _abs2(a3);
+    }
+    return (((uint16_t)sum) + ((uint32_t)sum>>16)) >> 1;
 }
 
-#define PIXEL_SATD_C64( name, width, height ) \
-int name( uint8_t *pix1, int i_stride_pix1, \
-                 uint8_t *pix2, int i_stride_pix2 ) \
-{ \
-    return pixel_satd_wxh( pix1, i_stride_pix1, pix2, i_stride_pix2, width, height ); \
+#define PIXEL_SATD_C64( w, h, sub )\
+int x264_pixel_satd_##w##x##h##_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )\
+{\
+    int sum = sub( pix1, i_pix1, pix2, i_pix2 )\
+            + sub( pix1+4*i_pix1, i_pix1, pix2+4*i_pix2, i_pix2 );\
+    if( w==16 )\
+        sum+= sub( pix1+8, i_pix1, pix2+8, i_pix2 )\
+            + sub( pix1+8+4*i_pix1, i_pix1, pix2+8+4*i_pix2, i_pix2 );\
+    if( h==16 )\
+        sum+= sub( pix1+8*i_pix1, i_pix1, pix2+8*i_pix2, i_pix2 )\
+            + sub( pix1+12*i_pix1, i_pix1, pix2+12*i_pix2, i_pix2 );\
+    if( w==16 && h==16 )\
+        sum+= sub( pix1+8+8*i_pix1, i_pix1, pix2+8+8*i_pix2, i_pix2 )\
+            + sub( pix1+8+12*i_pix1, i_pix1, pix2+8+12*i_pix2, i_pix2 );\
+    return sum;\
 }
-PIXEL_SATD_C64( x264_pixel_satd_16x16_c64, 16, 16 )
-PIXEL_SATD_C64( x264_pixel_satd_16x8_c64,  16,  8 )
-PIXEL_SATD_C64( x264_pixel_satd_8x16_c64,   8, 16 )
-PIXEL_SATD_C64( x264_pixel_satd_8x8_c64,    8,  8 )
-PIXEL_SATD_C64( x264_pixel_satd_8x4_c64,    8,  4 )
-PIXEL_SATD_C64( x264_pixel_satd_4x8_c64,    4,  8 )
-/*PIXEL_SATD_C64( x264_pixel_satd_4x4_c64,    4,  4 )*/
+PIXEL_SATD_C64( 16, 16, x264_pixel_satd_8x4_c64 )
+PIXEL_SATD_C64( 16, 8,  x264_pixel_satd_8x4_c64 )
+PIXEL_SATD_C64( 8,  16, x264_pixel_satd_8x4_c64 )
+PIXEL_SATD_C64( 8,  8,  x264_pixel_satd_8x4_c64 )
+PIXEL_SATD_C64( 4,  8,  x264_pixel_satd_4x4_c64 )
 
 /****************************************************************************
  * pixel_var_wxh
