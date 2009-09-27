@@ -252,3 +252,56 @@ int name( uint8_t *pix, int i_stride )                      \
 PIXEL_VAR_C64( x264_pixel_var_16x16_c64, 16, 8 )
 PIXEL_VAR_C64( x264_pixel_var_8x8_c64,    8, 6 )
 
+static NOINLINE int sa8d_8x8( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
+{
+    uint32_t tmp[8][4];
+    uint32_t a0,a1,a2,a3,a4,a5,a6,a7,b0,b1,b2,b3;
+    uint32_t unit = 0x00010001;
+    int sum=0, i;
+    uint64_t d0, d1;
+    START_COUNTER
+    for( i=0; i<8; i++, pix1+=i_pix1, pix2+=i_pix2 )
+    {
+        d0 = _mem8_const(pix1);
+        d1 = _mem8_const(pix2);
+        b0 = _swap4(_loll(d0)); b1 = _swap4(_loll(d1));
+        b2 = _swap4(_hill(d0)); b3 = _swap4(_hill(d1));
+        a0 = _sub2(_unpklu4(b0), _unpklu4(b1));
+        a1 = _sub2(_unpkhu4(b0), _unpkhu4(b1));
+        a2 = _sub2(_unpklu4(b2), _unpklu4(b3));
+        a3 = _sub2(_unpkhu4(b2), _unpkhu4(b3));
+        b0 = _spack2(_dotpn2(a0, unit), _dotp2(a0, unit));
+        b1 = _spack2(_dotpn2(a1, unit), _dotp2(a1, unit));
+        b2 = _spack2(_dotpn2(a2, unit), _dotp2(a2, unit));
+        b3 = _spack2(_dotpn2(a3, unit), _dotp2(a3, unit));
+        HADAMARD4( tmp[i][0], tmp[i][1], tmp[i][2], tmp[i][3], b0,b1,b2,b3 );
+    }
+    for( i=0; i<4; i++ )
+    {
+        HADAMARD4( a0,a1,a2,a3, tmp[0][i], tmp[1][i], tmp[2][i], tmp[3][i] );
+        HADAMARD4( a4,a5,a6,a7, tmp[4][i], tmp[5][i], tmp[6][i], tmp[7][i] );
+        b0  = _abs2(_add2(a0, a4)) + _abs2(_sub2(a0, a4));
+        b0 += _abs2(_add2(a1, a5)) + _abs2(_sub2(a1, a5));
+        b0 += _abs2(_add2(a2, a6)) + _abs2(_sub2(a2, a6));
+        b0 += _abs2(_add2(a3, a7)) + _abs2(_sub2(a3, a7));
+        sum += (uint16_t)b0 + (b0>>16);
+    }
+    STOP_COUNTER
+    return sum;
+}
+
+int x264_pixel_sa8d_8x8_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
+{
+    int sum = sa8d_8x8( pix1, i_pix1, pix2, i_pix2 );
+    return (sum+2)>>2;
+}
+
+int x264_pixel_sa8d_16x16_c64( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
+{
+    int sum = sa8d_8x8( pix1, i_pix1, pix2, i_pix2 )
+            + sa8d_8x8( pix1+8, i_pix1, pix2+8, i_pix2 )
+            + sa8d_8x8( pix1+8*i_pix1, i_pix1, pix2+8*i_pix2, i_pix2 )
+            + sa8d_8x8( pix1+8+8*i_pix1, i_pix1, pix2+8+8*i_pix2, i_pix2 );
+    return (sum+2)>>2;
+}
+

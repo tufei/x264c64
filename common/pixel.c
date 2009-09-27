@@ -907,6 +907,8 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
     INIT7( satd_x4, _c64 );
     INIT7( ssd, _c64 );
 
+    pixf->sa8d[PIXEL_16x16] = x264_pixel_sa8d_16x16_c64;
+    pixf->sa8d[PIXEL_8x8]   = x264_pixel_sa8d_8x8_c64;
     pixf->var[PIXEL_16x16] = x264_pixel_var_16x16_c64;
     pixf->var[PIXEL_8x8]   = x264_pixel_var_8x8_c64;
 #endif /* _TMS320C6400 */
