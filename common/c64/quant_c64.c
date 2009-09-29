@@ -66,6 +66,30 @@
 }
 #endif
 
+/*
+ * here we assume that both mf and f are representable by 16 bits
+ */
+#define QUANT_FOUR_DC( coef, mf, f ) \
+{                                                                   \
+    uint32_t s0, s1, a0, a1;                                        \
+    uint64_t bf, m, c;                                              \
+    c = _mem8(&(coef));                                             \
+    bf = _pack2(f, f);                                              \
+    m = _pack2(mf, mf);                                             \
+    a0 = _abs2(_loll(c)); a1 = _abs2(_hill(c));                     \
+    s0 = _cmpgt2(a0, _loll(c)); s1 = _cmpgt2(a1, _hill(c));         \
+    a0 = _add2(a0, bf); a1 = _add2(a1, bf);                         \
+    c = _mpy2ll(a0, m);                                             \
+    a0 = _packh2(_hill(c), _loll(c));                               \
+    c = _mpy2ll(a1, m);                                             \
+    a1 = _packh2(_hill(c), _loll(c));                               \
+    a0 ^= _xpnd2(s0); a1 ^= _xpnd2(s1);                             \
+    a0 = _add2(a0, _deal(s0)); a1 = _add2(a1, _deal(s1));           \
+    c = _itoll(a1, a0);                                             \
+    _mem8(&(coef)) = c;                                             \
+    nz |= !!c;                                                      \
+}
+
 int x264_quant_8x8_c64( int16_t dct[8][8], uint16_t mf[64], uint16_t bias[64] )
 {
     int i, nz = 0;
@@ -79,6 +103,21 @@ int x264_quant_4x4_c64( int16_t dct[4][4], uint16_t mf[16], uint16_t bias[16] )
     int i, nz = 0;
     for( i = 0; i < 16; i += 4 )
         QUANT_FOUR( dct[0][i], mf[i], bias[i] );
+    return nz;
+}
+
+int x264_quant_4x4_dc_c64( int16_t dct[4][4], int mf, int bias )
+{
+    int i, nz = 0;
+    for( i = 0; i < 16; i += 4 )
+        QUANT_FOUR_DC( dct[0][i], mf, bias );
+    return nz;
+}
+
+int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
+{
+    int nz = 0;
+    QUANT_FOUR_DC( dct[0][0], mf, bias );
     return nz;
 }
 

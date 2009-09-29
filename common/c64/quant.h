@@ -26,4 +26,7 @@
 int x264_quant_4x4_c64( int16_t dct[4][4], uint16_t mf[16], uint16_t bias[16] );
 int x264_quant_8x8_c64( int16_t dct[8][8], uint16_t mf[64], uint16_t bias[64] );
 
+int x264_quant_4x4_dc_c64( int16_t dct[4][4], int mf, int bias );
+int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias );
+
 #endif /* X264_C64_QUANT_H */

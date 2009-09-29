@@ -463,6 +463,8 @@ void x264_quant_init( x264_t *h, int cpu, x264_quant_function_t *pf )
 #endif
 
 #ifdef _TMS320C6400
+        pf->quant_2x2_dc = x264_quant_2x2_dc_c64;
+        pf->quant_4x4_dc = x264_quant_4x4_dc_c64;
         pf->quant_4x4 = x264_quant_4x4_c64;
         pf->quant_8x8 = x264_quant_8x8_c64;
 #endif
