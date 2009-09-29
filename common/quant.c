@@ -32,6 +32,9 @@
 #ifdef ARCH_ARM
 #   include "arm/quant.h"
 #endif
+#ifdef _TMS320C6400
+#include "c64/quant.h"
+#endif
 
 #define QUANT_ONE( coef, mf, f ) \
 { \
@@ -458,6 +461,12 @@ void x264_quant_init( x264_t *h, int cpu, x264_quant_function_t *pf )
         pf->coeff_last[DCT_LUMA_8x8] = x264_coeff_last64_neon;
     }
 #endif
+
+#ifdef _TMS320C6400
+        pf->quant_4x4 = x264_quant_4x4_c64;
+        pf->quant_8x8 = x264_quant_8x8_c64;
+#endif
+
     pf->coeff_last[  DCT_LUMA_DC] = pf->coeff_last[DCT_LUMA_4x4];
     pf->coeff_last[DCT_CHROMA_AC] = pf->coeff_last[ DCT_LUMA_AC];
     pf->coeff_level_run[  DCT_LUMA_DC] = pf->coeff_level_run[DCT_LUMA_4x4];

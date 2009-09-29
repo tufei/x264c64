@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mc_c64.c: h264 encoder library (Motion Compensation)
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2003-2009 x264 project
  *
  * Author: Yufei Yuan <yyuan@gmx.com>
  *

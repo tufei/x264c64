@@ -1,7 +1,7 @@
 /*****************************************************************************
  * pixel_c64.c: h264 encoder library
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2003-2009 x264 project
  *
  * Author: Yufei Yuan <yyuan@gmx.com>
  *
@@ -259,7 +259,6 @@ static NOINLINE int sa8d_8x8( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pi
     uint32_t unit = 0x00010001;
     int sum=0, i;
     uint64_t d0, d1;
-    START_COUNTER
     for( i=0; i<8; i++, pix1+=i_pix1, pix2+=i_pix2 )
     {
         d0 = _mem8_const(pix1);
@@ -286,7 +285,6 @@ static NOINLINE int sa8d_8x8( uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pi
         b0 += _abs2(_add2(a3, a7)) + _abs2(_sub2(a3, a7));
         sum += (uint16_t)b0 + (b0>>16);
     }
-    STOP_COUNTER
     return sum;
 }
 
