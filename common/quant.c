@@ -467,6 +467,9 @@ void x264_quant_init( x264_t *h, int cpu, x264_quant_function_t *pf )
         pf->quant_4x4_dc = x264_quant_4x4_dc_c64;
         pf->quant_4x4 = x264_quant_4x4_c64;
         pf->quant_8x8 = x264_quant_8x8_c64;
+
+        pf->dequant_4x4 = x264_dequant_4x4_c64;
+        pf->dequant_8x8 = x264_dequant_8x8_c64;
 #endif
 
     pf->coeff_last[  DCT_LUMA_DC] = pf->coeff_last[DCT_LUMA_4x4];

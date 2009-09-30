@@ -121,3 +121,93 @@ int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
     return nz;
 }
 
+#define DEQUANT_SHL_FOUR( x ) \
+{                                                               \
+    uint64_t d, dm0, dm1;                                       \
+    const int cf = (16 << 5) + (16 - 1) + i_qbits;              \
+    int m0, m1;                                                 \
+    d = _mem8(&dct[y][x]);                                      \
+    dm0 = _mem8_const(&dequant_mf[i_mf][y][x]);                 \
+    dm1 = _mem8_const(&dequant_mf[i_mf][y][(x) + 2]);           \
+    m0 = _spack2(_hill(dm0), _loll(dm0));                       \
+    m1 = _spack2(_hill(dm1), _loll(dm1));                       \
+    dm0 = _mpy2ll(_loll(d), m0);                                \
+    dm1 = _mpy2ll(_hill(d), m1);                                \
+    m0 = _spack2(_hill(dm0), _loll(dm0));                       \
+    m1 = _spack2(_hill(dm1), _loll(dm1));                       \
+    m0 = _clrr(m0 << i_qbits, cf);                              \
+    m1 = _clrr(m1 << i_qbits, cf);                              \
+    _mem8(&dct[y][x]) = _itoll(m1, m0);                         \
+}
+
+/*
+ * the declaration for _shr2() intrinsic in compiler guide has the two
+ * parameters' order reversed
+ */
+#define DEQUANT_SHR_FOUR( x ) \
+{                                                               \
+    uint64_t d, dm0, dm1;                                       \
+    const int ff = _pack2(f, f);                                \
+    int m0, m1;                                                 \
+    d = _mem8(&dct[y][x]);                                      \
+    dm0 = _mem8_const(&dequant_mf[i_mf][y][x]);                 \
+    dm1 = _mem8_const(&dequant_mf[i_mf][y][(x) + 2]);           \
+    m0 = _spack2(_hill(dm0), _loll(dm0));                       \
+    m1 = _spack2(_hill(dm1), _loll(dm1));                       \
+    dm0 = _mpy2ll(_loll(d), m0);                                \
+    dm1 = _mpy2ll(_hill(d), m1);                                \
+    m0 = _spack2(_hill(dm0), _loll(dm0));                       \
+    m1 = _spack2(_hill(dm1), _loll(dm1));                       \
+    m0 = _add2(m0, ff); m1 = _add2(m1, ff);                     \
+    m0 = _shr2(m0, -i_qbits); m1 = _shr2(m1, -i_qbits);         \
+    _mem8(&dct[y][x]) = _itoll(m1, m0);                         \
+}
+
+void x264_dequant_4x4_c64( int16_t dct[4][4], int dequant_mf[6][4][4], int i_qp )
+{
+    const int i_mf = i_qp%6;
+    const int i_qbits = i_qp/6 - 4;
+    int y;
+
+    if( i_qbits >= 0 )
+    {
+        for( y = 0; y < 4; y++ )
+        {
+            DEQUANT_SHL_FOUR( 0 );
+        }
+    }
+    else
+    {
+        const int f = 1 << (-i_qbits-1);
+        for( y = 0; y < 4; y++ )
+        {
+            DEQUANT_SHR_FOUR( 0 );
+        }
+    }
+}
+
+void x264_dequant_8x8_c64( int16_t dct[8][8], int dequant_mf[6][8][8], int i_qp )
+{
+    const int i_mf = i_qp%6;
+    const int i_qbits = i_qp/6 - 6;
+    int y;
+
+    if( i_qbits >= 0 )
+    {
+        for( y = 0; y < 8; y++ )
+        {
+            DEQUANT_SHL_FOUR( 0 );
+            DEQUANT_SHL_FOUR( 4 );
+        }
+    }
+    else
+    {
+        const int f = 1 << (-i_qbits-1);
+        for( y = 0; y < 8; y++ )
+        {
+            DEQUANT_SHR_FOUR( 0 );
+            DEQUANT_SHR_FOUR( 4 );
+        }
+    }
+}
+
