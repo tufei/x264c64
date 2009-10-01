@@ -264,8 +264,13 @@ int x264_analyse_init_costs( x264_t *h, int qp )
     h->cost_mv[lambda] += 2*4*2048;
     for( i = 0; i <= 2*4*2048; i++ )
     {
+#if 0
         h->cost_mv[lambda][-i] =
         h->cost_mv[lambda][i]  = lambda * (log2f(i+1)*2 + 0.718f + !!i) + .5f;
+#else
+        h->cost_mv[lambda][-i] =
+        h->cost_mv[lambda][i]  = (lambda * ((uint32_t)(log2f(i+1)*2*65536) + 47054 + ((!!i) << 16)) + 32768) >> 16;
+#endif
     }
     x264_pthread_mutex_lock( &cost_ref_mutex );
     for( i = 0; i < 3; i++ )

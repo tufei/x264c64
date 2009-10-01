@@ -56,3 +56,35 @@ void x264_dct4x4dc_c64( int16_t d[4][4] )
     }
 }
 
+void x264_idct4x4dc_c64( int16_t d[4][4] )
+{
+    int16_t tmp[4][4];
+    uint64_t a;
+    int lo, hi;
+    int i;
+    const uint32_t unit = 0x00010001;
+
+    for( i = 0; i < 4; i++ )
+    {
+        a = _mem8(d[i]);
+        lo = _packlh2(_loll(a), _loll(a));
+        hi = _packlh2(_hill(a), _hill(a));
+        tmp[0][i] = _dotp2(_add2(lo, hi), unit);
+        tmp[1][i] = _dotp2(_sub2(lo, hi), unit);
+        tmp[2][i] = _dotpn2(_sub2(lo, hi), unit);
+        tmp[3][i] = _dotpn2(_add2(lo, hi), unit);
+    }
+
+    for( i = 0; i < 4; i++ )
+    {
+        uint32_t dl, dh;
+
+        a = _mem8(tmp[i]);
+        lo = _packlh2(_loll(a), _loll(a));
+        hi = _packlh2(_hill(a), _hill(a));
+        dl = _spack2(_dotp2(_sub2(lo, hi), unit), _dotp2(_add2(lo, hi), unit));
+        dh = _spack2(_dotpn2(_add2(lo, hi), unit), _dotpn2(_sub2(lo, hi), unit));
+        _mem8(d[i]) = _itoll(dh, dl);
+    }
+}
+

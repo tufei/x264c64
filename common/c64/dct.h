@@ -24,6 +24,7 @@
 #define X264_C64_DCT_H
 
 void x264_dct4x4dc_c64( int16_t d[4][4] );
+void x264_idct4x4dc_c64( int16_t d[4][4] );
 
 #endif /* X264_C64_DCT_H */
 
