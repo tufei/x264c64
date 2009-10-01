@@ -31,6 +31,9 @@
 #ifdef ARCH_ARM
 #   include "arm/dct.h"
 #endif
+#ifdef _TMS320C6400
+#include "c64/dct.h"
+#endif
 
 int x264_dct4_weight2_zigzag[2][16];
 int x264_dct8_weight2_zigzag[2][64];
@@ -525,6 +528,10 @@ void x264_dct_init( int cpu, x264_dct_function_t *dctf )
         dctf->add8x8_idct8  = x264_add8x8_idct8_neon;
         dctf->add16x16_idct8= x264_add16x16_idct8_neon;
     }
+#endif
+
+#ifdef _TMS320C6400
+        dctf->dct4x4dc = x264_dct4x4dc_c64;
 #endif
 }
 
