@@ -88,3 +88,59 @@ void x264_idct4x4dc_c64( int16_t d[4][4] )
     }
 }
 
+static inline void pixel_sub_wxh( int16_t *diff, int i_size,
+                                  uint8_t *pix1, int i_pix1, uint8_t *pix2, int i_pix2 )
+{
+    int y, x;
+    uint32_t p1, p2;
+    uint32_t lo, hi;
+#pragma MUST_ITERATE(4, 8, 4);
+    for( y = 0; y < i_size; y++ )
+    {
+#pragma MUST_ITERATE(1, 2, 1);
+        for( x = 0; x < i_size; x += 4 )
+        {
+            p1 = _mem4_const(&pix1[x]); p2 = _mem4_const(&pix2[x]);
+            lo = _sub2(_unpklu4(p1), _unpklu4(p2));
+            hi = _sub2(_unpkhu4(p1), _unpkhu4(p2));
+            _mem8(&diff[x + y * i_size]) = _itoll(hi, lo);
+        }
+        pix1 += i_pix1;
+        pix2 += i_pix2;
+    }
+}
+
+void x264_sub4x4_dct_c64( int16_t dct[4][4], uint8_t *pix1, uint8_t *pix2 )
+{
+    int16_t d[4][4];
+    int16_t tmp[4][4];
+    int i;
+    uint32_t unit = 0x00010001;
+    uint32_t lo, hi, lo2, hi2;
+    uint64_t m;
+
+    pixel_sub_wxh( (int16_t*)d, 4, pix1, FENC_STRIDE, pix2, FDEC_STRIDE );
+
+    for( i = 0; i < 4; i++ )
+    {
+        m = _mem8_const(d[i]);
+        lo = _packlh2(_loll(m), _loll(m)); hi = _hill(m);
+        lo2 = _clr(lo << 1, 16, 16); hi2 = _clr(hi << 1, 16, 16);
+        tmp[0][i] = _dotp2(_add2(lo, hi), unit);
+        tmp[2][i] = _dotpn2(_add2(lo, hi), unit);
+        tmp[1][i] = _dotp2(_packhl2(_sub2(lo2, hi2), _sub2(lo, hi)), unit);
+        tmp[3][i] = _dotpn2(_packhl2(_sub2(lo, hi), _sub2(lo2, hi2)), unit);
+    }
+
+    for( i = 0; i < 4; i++ )
+    {
+        uint32_t ll, hh;
+        m = _mem8_const(tmp[i]);
+        lo = _packlh2(_loll(m), _loll(m)); hi = _hill(m);
+        lo2 = _clr(lo << 1, 16, 16); hi2 = _clr(hi << 1, 16, 16);
+        ll = _spack2(_dotp2(_packhl2(_sub2(lo2, hi2), _sub2(lo, hi)), unit), _dotp2(_add2(lo, hi), unit));
+        hh = _spack2(_dotpn2(_packhl2(_sub2(lo, hi), _sub2(lo2, hi2)), unit), _dotpn2(_add2(lo, hi), unit));
+        _mem8(dct[i]) = _itoll(hh, ll);
+    }
+}
+
