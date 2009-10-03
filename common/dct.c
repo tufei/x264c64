@@ -532,6 +532,9 @@ void x264_dct_init( int cpu, x264_dct_function_t *dctf )
 
 #ifdef _TMS320C6400
         dctf->sub4x4_dct = x264_sub4x4_dct_c64;
+        dctf->sub8x8_dct = x264_sub8x8_dct_c64;
+        dctf->sub16x16_dct = x264_sub16x16_dct_c64;
+        dctf->sub8x8_dct_dc = x264_sub8x8_dct_dc_c64;
         dctf->dct4x4dc = x264_dct4x4dc_c64;
         dctf->idct4x4dc = x264_idct4x4dc_c64;
 #endif

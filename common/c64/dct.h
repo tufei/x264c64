@@ -24,8 +24,11 @@
 #define X264_C64_DCT_H
 
 void x264_sub4x4_dct_c64( int16_t dct[4][4], uint8_t *pix1, uint8_t *pix2 );
+void x264_sub8x8_dct_c64( int16_t dct[4][4][4], uint8_t *pix1, uint8_t *pix2 );
+void x264_sub16x16_dct_c64( int16_t dct[16][4][4], uint8_t *pix1, uint8_t *pix2 );
 void x264_dct4x4dc_c64( int16_t d[4][4] );
 void x264_idct4x4dc_c64( int16_t d[4][4] );
 
+void x264_sub8x8_dct_dc_c64( int16_t dct[2][2], uint8_t *pix1, uint8_t *pix2 );
 #endif /* X264_C64_DCT_H */
 

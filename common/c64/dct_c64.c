@@ -144,3 +144,47 @@ void x264_sub4x4_dct_c64( int16_t dct[4][4], uint8_t *pix1, uint8_t *pix2 )
     }
 }
 
+void x264_sub8x8_dct_c64( int16_t dct[4][4][4], uint8_t *pix1, uint8_t *pix2 )
+{
+    x264_sub4x4_dct_c64( dct[0], &pix1[0], &pix2[0] );
+    x264_sub4x4_dct_c64( dct[1], &pix1[4], &pix2[4] );
+    x264_sub4x4_dct_c64( dct[2], &pix1[4*FENC_STRIDE+0], &pix2[4*FDEC_STRIDE+0] );
+    x264_sub4x4_dct_c64( dct[3], &pix1[4*FENC_STRIDE+4], &pix2[4*FDEC_STRIDE+4] );
+}
+
+void x264_sub16x16_dct_c64( int16_t dct[16][4][4], uint8_t *pix1, uint8_t *pix2 )
+{
+    x264_sub8x8_dct_c64( &dct[ 0], &pix1[0], &pix2[0] );
+    x264_sub8x8_dct_c64( &dct[ 4], &pix1[8], &pix2[8] );
+    x264_sub8x8_dct_c64( &dct[ 8], &pix1[8*FENC_STRIDE+0], &pix2[8*FDEC_STRIDE+0] );
+    x264_sub8x8_dct_c64( &dct[12], &pix1[8*FENC_STRIDE+8], &pix2[8*FDEC_STRIDE+8] );
+}
+
+static int sub4x4_dct_dc( uint8_t *pix1, uint8_t *pix2 )
+{
+    int16_t d[4][4];
+    int i, sum = 0;
+
+    pixel_sub_wxh( (int16_t*)d, 4, pix1, FENC_STRIDE, pix2, FDEC_STRIDE );
+
+    for(i = 0; i < 4; i++)
+    {
+        int m;
+        uint64_t d4;
+
+        d4 = _mem8_const(d[i]);
+        m = _add2(_loll(d4), _hill(d4));
+        sum += (int16_t)m + (m >> 16);
+    }
+
+    return sum;
+}
+
+void x264_sub8x8_dct_dc_c64( int16_t dct[2][2], uint8_t *pix1, uint8_t *pix2 )
+{
+    dct[0][0] = sub4x4_dct_dc( &pix1[0], &pix2[0] );
+    dct[0][1] = sub4x4_dct_dc( &pix1[4], &pix2[4] );
+    dct[1][0] = sub4x4_dct_dc( &pix1[4*FENC_STRIDE+0], &pix2[4*FDEC_STRIDE+0] );
+    dct[1][1] = sub4x4_dct_dc( &pix1[4*FENC_STRIDE+4], &pix2[4*FDEC_STRIDE+4] );
+}
+
