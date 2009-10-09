@@ -180,7 +180,7 @@ static void x264_slice_header_write( bs_t *s, x264_slice_header_t *sh, int i_nal
 
     bs_write_ue( s, sh->i_type + 5 );   /* same type things */
     bs_write_ue( s, sh->i_pps_id );
-    bs_write( s, sh->sps->i_log2_max_frame_num, sh->i_frame_num );
+    bs_write( s, sh->sps->i_log2_max_frame_num, sh->i_frame_num & ((1<<sh->sps->i_log2_max_frame_num)-1) );
 
     if( !sh->sps->b_frame_mbs_only )
     {
@@ -196,7 +196,7 @@ static void x264_slice_header_write( bs_t *s, x264_slice_header_t *sh, int i_nal
 
     if( sh->sps->i_poc_type == 0 )
     {
-        bs_write( s, sh->sps->i_log2_max_poc_lsb, sh->i_poc_lsb );
+        bs_write( s, sh->sps->i_log2_max_poc_lsb, sh->i_poc_lsb & ((1<<sh->sps->i_log2_max_poc_lsb)-1) );
         if( sh->pps->b_pic_order && !sh->b_field_pic )
         {
             bs_write_se( s, sh->i_delta_poc_bottom );
@@ -784,7 +784,7 @@ x264_t *x264_encoder_open( x264_param_t *param )
     x264_reduce_fraction( &h->param.i_fps_num, &h->param.i_fps_den );
 
     /* Init x264_t */
-    h->i_frame = 0;
+    h->i_frame = -1;
     h->i_frame_num = 0;
     h->i_idr_pic_id = 0;
 
@@ -1148,20 +1148,6 @@ static inline void x264_reference_build_list( x264_t *h, int i_poc )
         }
     } while( !b_ok );
 
-    /* In the standard, a P-frame's ref list is sorted by frame_num.
-     * We use POC, but check whether explicit reordering is needed */
-    h->b_ref_reorder[0] =
-    h->b_ref_reorder[1] = 0;
-    if( h->sh.i_type == SLICE_TYPE_P )
-    {
-        for( i = 0; i < h->i_ref0 - 1; i++ )
-            if( h->fref0[i]->i_frame_num < h->fref0[i+1]->i_frame_num )
-            {
-                h->b_ref_reorder[0] = 1;
-                break;
-            }
-    }
-
     h->i_ref1 = X264_MIN( h->i_ref1, h->frames.i_max_ref1 );
     h->i_ref0 = X264_MIN( h->i_ref0, h->frames.i_max_ref0 );
     h->i_ref0 = X264_MIN( h->i_ref0, h->param.i_frame_reference ); // if reconfig() has lowered the limit
@@ -1248,9 +1234,6 @@ static void x264_fdec_filter_row( x264_t *h, int mb_y )
 
 static inline int x264_reference_update( x264_t *h )
 {
-    if( h->fdec->i_frame >= 0 )
-        h->i_frame++;
-
     if( !h->fdec->b_kept_as_ref )
     {
         if( h->param.i_threads > 1 )
@@ -1468,24 +1451,26 @@ static int x264_slice_write( x264_t *h )
 
         /* accumulate mb stats */
         h->stat.frame.i_mb_count[h->mb.i_type]++;
-        if( h->param.i_log_level >= X264_LOG_INFO )
+
+        if( !IS_INTRA(h->mb.i_type) && !IS_SKIP(h->mb.i_type) && !IS_DIRECT(h->mb.i_type) )
         {
-            if( !IS_SKIP(h->mb.i_type) && !IS_INTRA(h->mb.i_type) && !IS_DIRECT(h->mb.i_type) )
-            {
-                if( h->mb.i_partition != D_8x8 )
+            if( h->mb.i_partition != D_8x8 )
                     h->stat.frame.i_mb_partition[h->mb.i_partition] += 4;
                 else
                     for( i = 0; i < 4; i++ )
                         h->stat.frame.i_mb_partition[h->mb.i_sub_partition[i]] ++;
-                if( h->param.i_frame_reference > 1 )
-                    for( i_list = 0; i_list <= (h->sh.i_type == SLICE_TYPE_B); i_list++ )
-                        for( i = 0; i < 4; i++ )
-                        {
-                            i_ref = h->mb.cache.ref[i_list][ x264_scan8[4*i] ];
-                            if( i_ref >= 0 )
-                                h->stat.frame.i_mb_count_ref[i_list][i_ref] ++;
-                        }
-            }
+            if( h->param.i_frame_reference > 1 )
+                for( i_list = 0; i_list <= (h->sh.i_type == SLICE_TYPE_B); i_list++ )
+                    for( i = 0; i < 4; i++ )
+                    {
+                        i_ref = h->mb.cache.ref[i_list][ x264_scan8[4*i] ];
+                        if( i_ref >= 0 )
+                            h->stat.frame.i_mb_count_ref[i_list][i_ref] ++;
+                    }
+        }
+
+        if( h->param.i_log_level >= X264_LOG_INFO )
+        {
             if( h->mb.i_cbp_luma || h->mb.i_cbp_chroma )
             {
                 int cbpsum = (h->mb.i_cbp_luma&1) + ((h->mb.i_cbp_luma>>1)&1)
@@ -1663,7 +1648,7 @@ int     x264_encoder_encode( x264_t *h,
                              x264_picture_t *pic_out )
 {
     x264_t *thread_current, *thread_prev, *thread_oldest;
-    int     i_nal_type;
+    int     i_nal_type, i;
     int     i_nal_ref_idc;
 
     int   i_global_qp;
@@ -1740,6 +1725,7 @@ int     x264_encoder_encode( x264_t *h,
         x264_pthread_cond_broadcast( &h->lookahead->ifbuf.cv_fill );
     }
 
+    h->i_frame++;
     /* 3: The picture is analyzed in the lookahead */
     if( !h->frames.current[0] )
         x264_lookahead_get_frames( h );
@@ -1820,21 +1806,22 @@ int     x264_encoder_encode( x264_t *h,
     h->out.i_nal = 0;
     bs_init( &h->out.bs, h->out.p_bitstream, h->out.i_bitstream );
 
-    if(h->param.b_aud){
+    if( h->param.b_aud )
+    {
         int pic_type;
 
-        if(h->sh.i_type == SLICE_TYPE_I)
+        if( h->sh.i_type == SLICE_TYPE_I )
             pic_type = 0;
-        else if(h->sh.i_type == SLICE_TYPE_P)
+        else if( h->sh.i_type == SLICE_TYPE_P )
             pic_type = 1;
-        else if(h->sh.i_type == SLICE_TYPE_B)
+        else if( h->sh.i_type == SLICE_TYPE_B )
             pic_type = 2;
         else
             pic_type = 7;
 
-        x264_nal_start(h, NAL_AUD, NAL_PRIORITY_DISPOSABLE);
-        bs_write(&h->out.bs, 3, pic_type);
-        bs_rbsp_trailing(&h->out.bs);
+        x264_nal_start( h, NAL_AUD, NAL_PRIORITY_DISPOSABLE );
+        bs_write( &h->out.bs, 3, pic_type );
+        bs_rbsp_trailing( &h->out.bs );
         if( x264_nal_end( h ) )
             return -1;
     }
@@ -1880,6 +1867,22 @@ int     x264_encoder_encode( x264_t *h,
 
     pic_out->i_qpplus1 =
     h->fdec->i_qpplus1 = i_global_qp + 1;
+
+    if( h->param.rc.b_stat_read && h->sh.i_type != SLICE_TYPE_I )
+        x264_reference_build_list_optimal( h );
+
+    /* Check to see whether we have chosen a reference list ordering different
+     * from the standard's default. */
+    h->b_ref_reorder[0] =
+    h->b_ref_reorder[1] = 0;
+    for( i = 0; i < h->i_ref0 - 1; i++ )
+        /* P and B-frames use different default orders. */
+        if( h->sh.i_type == SLICE_TYPE_P ? h->fref0[i]->i_frame_num < h->fref0[i+1]->i_frame_num
+                                         : h->fref0[i]->i_poc < h->fref0[i+1]->i_poc )
+        {
+            h->b_ref_reorder[0] = 1;
+            break;
+        }
 
     /* ------------------------ Create slice header  ----------------------- */
     x264_slice_init( h, i_nal_type, i_global_qp );
@@ -2117,6 +2120,17 @@ void    x264_encoder_close  ( x264_t *h )
             x264_frame_delete( h->thread[i]->fenc );
         }
     }
+
+    if( h->param.i_threads > 1 )
+    {
+        x264_t *thread_prev;
+
+        thread_prev = h->thread[ h->i_thread_phase % h->param.i_threads ];
+        x264_thread_sync_ratecontrol( h, thread_prev, h );
+        x264_thread_sync_ratecontrol( thread_prev, thread_prev, h );
+        h->i_frame = thread_prev->i_frame + 1 - h->param.i_threads;
+    }
+    h->i_frame++;
 
     /* Slices used and PSNR */
     for( i=0; i<5; i++ )

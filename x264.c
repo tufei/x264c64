@@ -41,10 +41,7 @@
 #include "common/cpu.h"
 #include "x264.h"
 #include "muxers.h"
-
-#ifndef _MSC_VER
 #include "config.h"
-#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -318,6 +315,7 @@ static void Help( x264_param_t *defaults, int longhelp )
     H2( "      --slice-max-size <integer> Limit the size of each slice in bytes\n");
     H2( "      --slice-max-mbs <integer> Limit the size of each slice in macroblocks\n");
     H0( "      --interlaced            Enable pure-interlaced mode\n" );
+    H2( "      --constrained-intra     Enable constrained intra prediction.\n" );
     H0( "\n" );
     H0( "Ratecontrol:\n" );
     H0( "\n" );
@@ -524,6 +522,7 @@ static struct option long_options[] =
     { "filter",      required_argument, NULL, 0 },
     { "deblock",     required_argument, NULL, 'f' },
     { "interlaced",        no_argument, NULL, 0 },
+    { "constrained-intra", no_argument, NULL, 0 },
     { "cabac",             no_argument, NULL, 0 },
     { "no-cabac",          no_argument, NULL, 0 },
     { "qp",          required_argument, NULL, 'q' },
@@ -756,6 +755,7 @@ static int  Parse( int argc, char **argv,
                 param->analyse.i_trellis = 2;
                 param->i_bframe = 16;
                 param->rc.i_lookahead = 60;
+                b_turbo = 0;
             }
             else
             {
@@ -1399,14 +1399,14 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     p_close_infile( opt->hin );
     p_close_outfile( opt->hout );
 
-    if( i_frame > 0 )
+    if( i_frame_output > 0 )
     {
-        double fps = (double)i_frame * (double)1000000 /
+        double fps = (double)i_frame_output * (double)1000000 /
                      (double)( i_end - i_start );
 
         fprintf( stderr, "encoded %d frames, %.2f fps, %.2f kb/s\n", i_frame_output, fps,
                  (double) i_file * 8 * param->i_fps_num /
-                 ( (double) param->i_fps_den * i_frame * 1000 ) );
+                 ( (double) param->i_fps_den * i_frame_output * 1000 ) );
     }
 
     return 0;

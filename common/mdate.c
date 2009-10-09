@@ -29,7 +29,7 @@ int64_t x264_mdate( void )
     return (int64_t)c64_timer_read() / CYCLES_PER_USEC;
 }
 #else
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
+#ifndef __MINGW32__
 #include <sys/time.h>
 #else
 #include <sys/types.h>
@@ -42,9 +42,8 @@ int64_t x264_mdate( void )
 
 int64_t x264_mdate( void )
 {
-#if !(defined(_MSC_VER) || defined(__MINGW32__))
+#ifndef __MINGW32__
     struct timeval tv_date;
-
     gettimeofday( &tv_date, NULL );
     return( (int64_t) tv_date.tv_sec * 1000000 + (int64_t) tv_date.tv_usec );
 #else

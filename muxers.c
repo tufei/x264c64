@@ -25,10 +25,7 @@
 #include "x264.h"
 #include "matroska.h"
 #include "muxers.h"
-
-#ifndef _MSC_VER
 #include "config.h"
-#endif
 
 #ifndef _TMS320C6400
 #include <sys/types.h>
