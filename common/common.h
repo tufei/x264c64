@@ -399,7 +399,7 @@ struct x264_t
     const uint8_t   *chroma_qp_table; /* includes both the nonlinear luma->chroma mapping and chroma_qp_offset */
 
 #ifdef _TMS320C6400
-    uint32_t dummy[1];  /* hack to satisfy alignment */
+    /*uint32_t dummy[1];*/  /* hack to satisfy alignment */
     uint32_t nr_residual_sum[2][64];
     uint16_t nr_offset[2][64];
 #else
@@ -575,7 +575,7 @@ struct x264_t
 #define FENC_STRIDE 16
 #define FDEC_STRIDE 32
 #ifdef _TMS320C6400
-//            uint32_t dummy[3]; /* alignment */
+            uint32_t dummy[3]; /* alignment */
             uint8_t fenc_buf[24*FENC_STRIDE];
             uint8_t fdec_buf[27*FDEC_STRIDE];
 
