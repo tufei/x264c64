@@ -36,6 +36,9 @@
 #ifdef ARCH_ARM
 #   include "arm/predict.h"
 #endif
+#ifdef _TMS320C6400
+#include "c64/predict.h"
+#endif
 
 /****************************************************************************
  * 16x16 prediction for intra luma block
@@ -1034,6 +1037,10 @@ void x264_predict_16x16_init( int cpu, x264_predict_t pf[7] )
 
 #ifdef HAVE_ARMV6
     x264_predict_16x16_init_arm( cpu, pf );
+#endif
+
+#ifdef _TMS320C6400
+    x264_predict_16x16_init_c64( pf );
 #endif
 }
 
