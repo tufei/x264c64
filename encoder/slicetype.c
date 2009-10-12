@@ -921,7 +921,7 @@ static void x264_slicetype_path( x264_t *h, x264_mb_analysis_t *a, x264_frame_t 
     memcpy( best_paths[length], paths[best_path_index], length );
 }
 
-static int scenecut( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, int p0, int p1, int print )
+static int scenecut_internal( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, int p0, int p1, int print )
 {
     x264_frame_t *frame = frames[p1];
     x264_slicetype_frame_cost( h, a, frames, p0, p1, p1, 0 );
@@ -969,11 +969,51 @@ static int scenecut( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, in
 #endif
 }
 
+static int scenecut( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, int p0, int p1, int real_scenecut, int num_frames )
+{
+    int curp0, curp1, i, maxp1 = p0 + 1;
+
+    /* Only do analysis during a normal scenecut check. */
+    if( real_scenecut && h->param.i_bframe )
+    {
+        /* Look ahead to avoid coding short flashes as scenecuts. */
+        if( h->param.i_bframe_adaptive == X264_B_ADAPT_TRELLIS )
+            /* Don't analyse any more frames than the trellis would have covered. */
+            maxp1 += h->param.i_bframe;
+        else
+            maxp1++;
+        maxp1 = X264_MIN( maxp1, num_frames );
+
+        /* Where A and B are scenes: AAAAAABBBAAAAAA
+         * If BBB is shorter than (maxp1-p0), it is detected as a flash
+         * and not considered a scenecut. */
+        for( curp1 = p1; curp1 <= maxp1; curp1++ )
+            if( !scenecut_internal( h, a, frames, p0, curp1, 0 ) )
+                /* Any frame in between p0 and cur_p1 cannot be a real scenecut. */
+                for( i = curp1; i > p0; i-- )
+                    frames[i]->b_scenecut = 0;
+
+        /* Where A-F are scenes: AAAAABBCCDDEEFFFFFF
+         * If each of BB ... EE are shorter than (maxp1-p0), they are
+         * detected as flashes and not considered scenecuts.
+         * Instead, the first F frame becomes a scenecut. */
+        for( curp0 = p0; curp0 < maxp1; curp0++ )
+            if( scenecut_internal( h, a, frames, curp0, maxp1, 0 ) )
+                /* If cur_p0 is the p0 of a scenecut, it cannot be the p1 of a scenecut. */
+                    frames[curp0]->b_scenecut = 0;
+    }
+
+    /* Ignore frames that are part of a flash, i.e. cannot be real scenecuts. */
+    if( !frames[p1]->b_scenecut )
+        return 0;
+    return scenecut_internal( h, a, frames, p0, p1, real_scenecut );
+}
+
 void x264_slicetype_analyse( x264_t *h, int keyframe )
 {
     x264_mb_analysis_t a;
     x264_frame_t *frames[X264_LOOKAHEAD_MAX+3] = { NULL, };
-    int num_frames, keyint_limit, idr_frame_type, i, j;
+    int num_frames, orig_num_frames, keyint_limit, idr_frame_type, i, j;
     int i_mb_count = NUM_MBS;
     int cost1p0, cost2p0, cost1b1, cost2p1;
     int i_max_search = X264_MIN( h->lookahead->next.i_size, X264_LOOKAHEAD_MAX );
@@ -1004,7 +1044,7 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
         return;
 
     keyint_limit = h->param.i_keyint_max - frames[0]->i_frame + h->lookahead->i_last_idr - 1;
-    num_frames = X264_MIN( j, keyint_limit );
+    orig_num_frames = num_frames = X264_MIN( j, keyint_limit );
 
     x264_lowres_context_init( h, &a );
     idr_frame_type = frames[1]->i_frame - h->lookahead->i_last_idr >= h->param.i_keyint_min ? X264_TYPE_IDR : X264_TYPE_I;
@@ -1018,7 +1058,7 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
     else if( num_frames == 1 )
     {
         frames[1]->i_type = X264_TYPE_P;
-        if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, 0, 1, 1 ) )
+        if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, 0, 1, 1, orig_num_frames ) )
             frames[1]->i_type = idr_frame_type;
         return;
     }
@@ -1042,7 +1082,7 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
     int num_analysed_frames = num_frames;
     int reset_start;
 #endif /* _TMS320C6400 */
-    if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, 0, 1, 1 ) )
+    if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, 0, 1, 1, orig_num_frames ) )
     {
         frames[1]->i_type = idr_frame_type;
         return;
@@ -1125,7 +1165,7 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
 
         /* Check scenecut on the first minigop. */
         for( j = 1; j < num_bframes+1; j++ )
-            if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, j, j+1, 0 ) )
+            if( h->param.i_scenecut_threshold && scenecut( h, &a, frames, j, j+1, 0, orig_num_frames ) )
             {
                 frames[j]->i_type = X264_TYPE_P;
                 num_analysed_frames = j;
@@ -1254,9 +1294,19 @@ void x264_slicetype_decide( x264_t *h )
 
         x264_slicetype_frame_cost( h, &a, frames, p0, p1, b, 0 );
 
-        /* We need the intra costs for row SATDs. */
         if( b && h->param.rc.i_vbv_buffer_size )
+        {
+            /* We need the intra costs for row SATDs. */
             x264_slicetype_frame_cost( h, &a, frames, b, b, b, 0 );
+
+            /* We need B-frame costs for row SATDs. */
+            for( i = 0; i < bframes; i++ )
+            {
+                b = bframes - i;
+                frames[b] = h->lookahead->next.list[i];
+                x264_slicetype_frame_cost( h, &a, frames, p0, p1, b, 0 );
+            }
+        }
     }
 }
 
@@ -1272,8 +1322,14 @@ int x264_rc_analyse_slice( x264_t *h )
 
     if( IS_X264_TYPE_I(h->fenc->i_type) )
         p1 = b = 0;
-    else // P
+    else if( h->fenc->i_type == X264_TYPE_P )
         p1 = b = h->fenc->i_bframes + 1;
+    else //B
+    {
+        p1 = (h->fref1[0]->i_poc - h->fref0[0]->i_poc)/2;
+        b  = (h->fref1[0]->i_poc - h->fenc->i_poc)/2;
+        frames[p1] = h->fref1[0];
+    }
     frames[p0] = h->fref0[0];
     frames[b] = h->fenc;
 

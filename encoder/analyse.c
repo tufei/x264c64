@@ -167,10 +167,10 @@ const int x264_lambda2_tab[52] = {
 };
 
 const uint8_t x264_exp2_lut[64] = {
-      1,   4,   7,  10,  13,  16,  19,  22,  25,  28,  31,  34,  37,  40,  44,  47,
-     50,  53,  57,  60,  64,  67,  71,  74,  78,  81,  85,  89,  93,  96, 100, 104,
-    108, 112, 116, 120, 124, 128, 132, 137, 141, 145, 150, 154, 159, 163, 168, 172,
-    177, 182, 186, 191, 196, 201, 206, 211, 216, 221, 226, 232, 237, 242, 248, 253,
+      0,   3,   6,   8,  11,  14,  17,  20,  23,  26,  29,  32,  36,  39,  42,  45,
+     48,  52,  55,  58,  62,  65,  69,  72,  76,  80,  83,  87,  91,  94,  98, 102,
+    106, 110, 114, 118, 122, 126, 130, 135, 139, 143, 147, 152, 156, 161, 165, 170,
+    175, 179, 184, 189, 194, 198, 203, 208, 214, 219, 224, 229, 234, 240, 245, 250
 };
 
 const float x264_log2_lut[128] = {
@@ -642,8 +642,8 @@ static void inline x264_psy_trellis_init( x264_t *h, int do_both_dct )
 /* For trellis=2, we need to do this for both sizes of DCT, for trellis=1 we only need to use it on the chosen mode. */
 static void inline x264_psy_trellis_init( x264_t *h, int do_both_dct )
 {
-    ALIGNED_ARRAY_16( int16_t, dct8x8,[4],[8][8] );
-    ALIGNED_ARRAY_16( int16_t, dct4x4,[16],[4][4] );
+    ALIGNED_ARRAY_16( int16_t, dct8x8,[4],[64] );
+    ALIGNED_ARRAY_16( int16_t, dct4x4,[16],[16] );
     ALIGNED_16( static uint8_t zero[16*FDEC_STRIDE] ) = {0};
     int i;
 
