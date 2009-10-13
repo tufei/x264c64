@@ -24,5 +24,6 @@
 #define X264_C64_PREDICT_H
 
 void x264_predict_16x16_init_c64( x264_predict_t pf[7] );
+void x264_predict_8x8c_init_c64( x264_predict_t pf[7] );
 
 #endif /* X264_C64_PREDICT_H */

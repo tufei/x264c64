@@ -95,10 +95,11 @@ extern far char __c_args__;
 const char *main_arguments[] = 
 {
     "x264.out",
-    "--bitrate", "400",
+    "-B", "400",
     "-w",
     "--rc-lookahead", "1",
     "-b", "2",
+    "--psy-rd", "0.8:0.0",
     "--frames", "10",
 #if 0
     "-t", "0",

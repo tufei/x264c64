@@ -177,6 +177,51 @@ static void predict_16x16_p_c64( uint8_t *src )
     }
 }
 
+static void predict_8x8c_p_c64( uint8_t *src )
+{
+    int i;
+    int x,y;
+    int a, b, c;
+    int H = 0;
+    int V = 0;
+    int i00;
+    int VH;
+    int m3 = 0x00030003;
+    int m17 = 0x00110011;
+    int a16 = 0x00100010;
+    uint64_t mVH;
+
+    for( i = 0; i < 4; i++ )
+    {
+        H += ( i + 1 ) * ( src[4+i - FDEC_STRIDE] - src[2 - i -FDEC_STRIDE] );
+        V += ( i + 1 ) * ( src[-1 +(i+4)*FDEC_STRIDE] - src[-1+(2-i)*FDEC_STRIDE] );
+    }
+
+    a = 16 * ( src[-1+7*FDEC_STRIDE] + src[7 - FDEC_STRIDE] );
+    VH = _pack2(V, H);
+    mVH = _mpy2ll(VH, m17);
+    VH = _pack2(_hill(mVH), _loll(mVH));
+    VH = _shr2(_add2(VH, a16), 5);
+    b = (int16_t)VH;
+    c = VH >> 16;
+
+    i00 = a + 16 - _dotp2(VH, m3);
+
+    for( y = 0; y < 8; y++ )
+    {
+        int pix = i00;
+        for( x = 0; x < 8; x += 4 )
+        {
+            const int p10 = _pack2(pix + b, pix);
+            const int p32 = _add2(p10, _pack2(b << 1, b << 1));
+            _mem4(&src[x]) = _spacku4(_shr2(p32, 5), _shr2(p10, 5));
+            pix += b << 2;
+        }
+        src += FDEC_STRIDE;
+        i00 += c;
+    }
+}
+
 /****************************************************************************
  * Exported functions:
  ****************************************************************************/
@@ -189,5 +234,10 @@ void x264_predict_16x16_init_c64( x264_predict_t pf[7] )
     pf[I_PRED_16x16_DC_LEFT] = predict_16x16_dc_left_c64;
     pf[I_PRED_16x16_DC_TOP ] = predict_16x16_dc_top_c64;
     pf[I_PRED_16x16_DC_128 ] = predict_16x16_dc_128_c64;
+}
+
+void x264_predict_8x8c_init_c64( x264_predict_t pf[7] )
+{
+    pf[I_PRED_CHROMA_P ]     = predict_8x8c_p_c64;
 }
 
