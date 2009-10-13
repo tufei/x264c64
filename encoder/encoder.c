@@ -1800,9 +1800,6 @@ int     x264_encoder_encode( x264_t *h,
     /* build ref list 0/1 */
     x264_reference_build_list( h, h->fdec->i_poc );
 
-    if( h->sh.i_type == SLICE_TYPE_B )
-        x264_macroblock_bipred_init( h );
-
     /* ---------------------- Write the bitstream -------------------------- */
     /* Init bitstream context */
     h->out.i_nal = 0;
@@ -1885,6 +1882,9 @@ int     x264_encoder_encode( x264_t *h,
             h->b_ref_reorder[0] = 1;
             break;
         }
+
+    if( h->sh.i_type == SLICE_TYPE_B )
+        x264_macroblock_bipred_init( h );
 
     /* ------------------------ Create slice header  ----------------------- */
     x264_slice_init( h, i_nal_type, i_global_qp );
