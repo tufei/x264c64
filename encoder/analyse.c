@@ -614,9 +614,9 @@ static void predict_4x4_mode_available( unsigned int i_neighbour,
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct8x8, 16);
-static int16_t dct8x8[4][8][8];
+static int16_t dct8x8[4][64];
 #pragma DATA_ALIGN(dct4x4, 16);
-static int16_t dct4x4[16][4][4];
+static int16_t dct4x4[16][16];
 #pragma DATA_ALIGN(zero_0, 16);
 static uint8_t zero_0[16*FDEC_STRIDE];
 

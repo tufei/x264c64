@@ -90,34 +90,34 @@
     nz |= !!c;                                                      \
 }
 
-int x264_quant_8x8_c64( int16_t dct[8][8], uint16_t mf[64], uint16_t bias[64] )
+int x264_quant_8x8_c64( int16_t dct[64], uint16_t mf[64], uint16_t bias[64] )
 {
     int i, nz = 0;
     for( i = 0; i < 64; i += 4 )
-        QUANT_FOUR( dct[0][i], mf[i], bias[i] );
+        QUANT_FOUR( dct[i], mf[i], bias[i] );
     return nz;
 }
 
-int x264_quant_4x4_c64( int16_t dct[4][4], uint16_t mf[16], uint16_t bias[16] )
+int x264_quant_4x4_c64( int16_t dct[16], uint16_t mf[16], uint16_t bias[16] )
 {
     int i, nz = 0;
     for( i = 0; i < 16; i += 4 )
-        QUANT_FOUR( dct[0][i], mf[i], bias[i] );
+        QUANT_FOUR( dct[i], mf[i], bias[i] );
     return nz;
 }
 
-int x264_quant_4x4_dc_c64( int16_t dct[4][4], int mf, int bias )
+int x264_quant_4x4_dc_c64( int16_t dct[16], int mf, int bias )
 {
     int i, nz = 0;
     for( i = 0; i < 16; i += 4 )
-        QUANT_FOUR_DC( dct[0][i], mf, bias );
+        QUANT_FOUR_DC( dct[i], mf, bias );
     return nz;
 }
 
-int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
+int x264_quant_2x2_dc_c64( int16_t dct[4], int mf, int bias )
 {
     int nz = 0;
-    QUANT_FOUR_DC( dct[0][0], mf, bias );
+    QUANT_FOUR_DC( dct[0], mf, bias );
     return nz;
 }
 
@@ -126,9 +126,9 @@ int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
     uint64_t d, dm0, dm1;                                       \
     const int cf = (16 << 5) + (16 - 1) + i_qbits;              \
     int m0, m1;                                                 \
-    d = _mem8(&dct[y][x]);                                      \
-    dm0 = _mem8_const(&dequant_mf[i_mf][y][x]);                 \
-    dm1 = _mem8_const(&dequant_mf[i_mf][y][(x) + 2]);           \
+    d = _mem8(&dct[x]);                                         \
+    dm0 = _mem8_const(&dequant_mf[i_mf][x]);                    \
+    dm1 = _mem8_const(&dequant_mf[i_mf][(x) + 2]);              \
     m0 = _spack2(_hill(dm0), _loll(dm0));                       \
     m1 = _spack2(_hill(dm1), _loll(dm1));                       \
     dm0 = _mpy2ll(_loll(d), m0);                                \
@@ -137,7 +137,7 @@ int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
     m1 = _spack2(_hill(dm1), _loll(dm1));                       \
     m0 = _clrr(m0 << i_qbits, cf);                              \
     m1 = _clrr(m1 << i_qbits, cf);                              \
-    _mem8(&dct[y][x]) = _itoll(m1, m0);                         \
+    _mem8(&dct[x]) = _itoll(m1, m0);                            \
 }
 
 /*
@@ -149,9 +149,9 @@ int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
     uint64_t d, dm0, dm1;                                       \
     const int ff = _pack2(f, f);                                \
     int m0, m1;                                                 \
-    d = _mem8(&dct[y][x]);                                      \
-    dm0 = _mem8_const(&dequant_mf[i_mf][y][x]);                 \
-    dm1 = _mem8_const(&dequant_mf[i_mf][y][(x) + 2]);           \
+    d = _mem8(&dct[x]);                                         \
+    dm0 = _mem8_const(&dequant_mf[i_mf][x]);                    \
+    dm1 = _mem8_const(&dequant_mf[i_mf][(x) + 2]);              \
     m0 = _spack2(_hill(dm0), _loll(dm0));                       \
     m1 = _spack2(_hill(dm1), _loll(dm1));                       \
     dm0 = _mpy2ll(_loll(d), m0);                                \
@@ -160,53 +160,53 @@ int x264_quant_2x2_dc_c64( int16_t dct[2][2], int mf, int bias )
     m1 = _spack2(_hill(dm1), _loll(dm1));                       \
     m0 = _add2(m0, ff); m1 = _add2(m1, ff);                     \
     m0 = _shr2(m0, -i_qbits); m1 = _shr2(m1, -i_qbits);         \
-    _mem8(&dct[y][x]) = _itoll(m1, m0);                         \
+    _mem8(&dct[x]) = _itoll(m1, m0);                            \
 }
 
-void x264_dequant_4x4_c64( int16_t dct[4][4], int dequant_mf[6][4][4], int i_qp )
+void x264_dequant_4x4_c64( int16_t dct[16], int dequant_mf[6][16], int i_qp )
 {
     const int i_mf = i_qp%6;
     const int i_qbits = i_qp/6 - 4;
-    int y;
+    int i;
 
     if( i_qbits >= 0 )
     {
-        for( y = 0; y < 4; y++ )
+        for( i = 0; i < 16; i += 4 )
         {
-            DEQUANT_SHL_FOUR( 0 );
+            DEQUANT_SHL_FOUR( i );
         }
     }
     else
     {
         const int f = 1 << (-i_qbits-1);
-        for( y = 0; y < 4; y++ )
+        for( i = 0; i < 16; i += 4 )
         {
-            DEQUANT_SHR_FOUR( 0 );
+            DEQUANT_SHR_FOUR( i );
         }
     }
 }
 
-void x264_dequant_8x8_c64( int16_t dct[8][8], int dequant_mf[6][8][8], int i_qp )
+void x264_dequant_8x8_c64( int16_t dct[64], int dequant_mf[6][64], int i_qp )
 {
     const int i_mf = i_qp%6;
     const int i_qbits = i_qp/6 - 6;
-    int y;
+    int i;
 
     if( i_qbits >= 0 )
     {
-        for( y = 0; y < 8; y++ )
+        for( i = 0; i < 64; i += 8 )
         {
-            DEQUANT_SHL_FOUR( 0 );
-            DEQUANT_SHL_FOUR( 4 );
+            DEQUANT_SHL_FOUR( i );
+            DEQUANT_SHL_FOUR( i + 4 );
         }
     }
     else
     {
         const int f = 1 << (-i_qbits-1);
-        for( y = 0; y < 8; y++ )
+        for( i = 0; i < 64; i += 8 )
         {
-            DEQUANT_SHR_FOUR( 0 );
-            DEQUANT_SHR_FOUR( 4 );
+            DEQUANT_SHR_FOUR( i );
+            DEQUANT_SHR_FOUR( i + 4 );
         }
     }
 }

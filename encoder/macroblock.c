@@ -120,7 +120,7 @@ static ALWAYS_INLINE int x264_quant_8x8( x264_t *h, int16_t dct[64], int i_qp, i
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct4x4_0, 16);
-static int16_t dct4x4_0[4][4];
+static int16_t dct4x4_0[16];
 
 void x264_mb_encode_i4x4( x264_t *h, int idx, int i_qp )
 {
@@ -205,7 +205,7 @@ void x264_mb_encode_i4x4( x264_t *h, int idx, int i_qp )
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct8x8_0, 16);
-static int16_t dct8x8_0[8][8];
+static int16_t dct8x8_0[64];
 
 void x264_mb_encode_i8x8( x264_t *h, int idx, int i_qp )
 {
@@ -273,9 +273,9 @@ void x264_mb_encode_i8x8( x264_t *h, int idx, int i_qp )
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct4x4_1, 16);
-static int16_t dct4x4_1[16][4][4];
+static int16_t dct4x4_1[16][16];
 #pragma DATA_ALIGN(dct_dc4x4, 16);
-static int16_t dct_dc4x4[4][4];
+static int16_t dct_dc4x4[16];
 
 static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
 {
@@ -292,7 +292,7 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
         {
             int oe = block_idx_xy_fenc[i];
             int od = block_idx_xy_fdec[i];
-            nz = h->zigzagf.sub_4x4ac( h->dct.luma4x4[i], p_src+oe, p_dst+od, &dct_dc4x4[0][block_idx_yx_1d[i]] );
+            nz = h->zigzagf.sub_4x4ac( h->dct.luma4x4[i], p_src+oe, p_dst+od, &dct_dc4x4[block_idx_yx_1d[i]] );
             h->mb.cache.non_zero_count[x264_scan8[i]] = nz;
             h->mb.i_cbp_luma |= nz;
         }
@@ -307,8 +307,8 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
     for( i = 0; i < 16; i++ )
     {
         /* copy dc coeff */
-        dct_dc4x4[0][block_idx_xy_1d[i]] = dct4x4_1[i][0][0];
-        dct4x4_1[i][0][0] = 0;
+        dct_dc4x4[block_idx_xy_1d[i]] = dct4x4_1[i][0];
+        dct4x4_1[i][0] = 0;
 
         /* quant/scan/dequant */
         nz = x264_quant_4x4( h, dct4x4_1[i], i_qp, DCT_LUMA_AC, 1, i );
@@ -349,7 +349,7 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
         h->quantf.dequant_4x4_dc( dct_dc4x4, h->dequant4_mf[CQM_4IY], i_qp );  /* XXX not inversed */
         if( h->mb.i_cbp_luma )
             for( i = 0; i < 16; i++ )
-                dct4x4_1[i][0][0] = dct_dc4x4[0][block_idx_xy_1d[i]];
+                dct4x4_1[i][0] = dct_dc4x4[block_idx_xy_1d[i]];
     }
 
     /* put pixels to fdec */
@@ -505,9 +505,9 @@ static inline int x264_mb_optimize_chroma_dc( x264_t *h, int b_inter, int i_qp, 
 
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct2x2_0, 16);
-static int16_t dct2x2_0[2][2];
+static int16_t dct2x2_0[4];
 #pragma DATA_ALIGN(dct4x4_2, 16);
-static int16_t dct4x4_2[4][4][4];
+static int16_t dct4x4_2[4][16];
 
 void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 {
@@ -911,7 +911,7 @@ static uint8_t edge[33];
 #pragma DATA_ALIGN(dct8x8_1, 16);
 static int16_t dct8x8_1[4][64];
 #pragma DATA_ALIGN(dct4x4_3, 16);
-static int16_t dct4x4_3[16][4][4];
+static int16_t dct4x4_3[16][16];
 
 void x264_macroblock_encode( x264_t *h )
 {
@@ -1128,7 +1128,7 @@ void x264_macroblock_encode( x264_t *h )
                     idx = i8x8 * 4 + i4x4;
 
                     if( h->mb.b_noise_reduction )
-                        h->quantf.denoise_dct( *dct4x4_3[idx], h->nr_residual_sum[0], h->nr_offset[0], 16 );
+                        h->quantf.denoise_dct( dct4x4_3[idx], h->nr_residual_sum[0], h->nr_offset[0], 16 );
                     nz = x264_quant_4x4( h, dct4x4_3[idx], i_qp, DCT_LUMA_4x4, 0, idx );
                     h->mb.cache.non_zero_count[x264_scan8[idx]] = nz;
 
@@ -1548,9 +1548,9 @@ void x264_macroblock_encode( x264_t *h )
  *****************************************************************************/
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct4x4_4, 16);
-static int16_t dct4x4_4[4][4][4];
+static int16_t dct4x4_4[4][16];
 #pragma DATA_ALIGN(dct2x2_1, 16);
-static int16_t dct2x2_1[2][2];
+static int16_t dct2x2_1[4];
 #pragma DATA_ALIGN(dctscan, 16);
 static int16_t dctscan[16];
 
@@ -1771,11 +1771,11 @@ void x264_noise_reduction_update( x264_t *h )
  *****************************************************************************/
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct8x8_2, 16);
-static int16_t dct8x8_2[8][8];
+static int16_t dct8x8_2[64];
 #pragma DATA_ALIGN(dct4x4_5, 16);
-static int16_t dct4x4_5[4][4][4];
+static int16_t dct4x4_5[4][16];
 #pragma DATA_ALIGN(dct4x4_6, 16);
-static int16_t dct4x4_6[4][4];
+static int16_t dct4x4_6[16];
 
 void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
 {
@@ -1879,7 +1879,7 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
             p_fdec = h->mb.pic.p_fdec[1+ch] + (i8&1)*4 + (i8>>1)*4*FDEC_STRIDE;
 
             h->dctf.sub4x4_dct( dct4x4_6, p_fenc, p_fdec );
-            dct4x4_6[0][0] = 0;
+            dct4x4_6[0] = 0;
 
             if( h->mb.b_trellis )
                 nz = x264_quant_4x4_trellis( h, dct4x4_6, CQM_4PC, i_qp, DCT_CHROMA_AC, 0, 1, 0 );
@@ -2032,7 +2032,7 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
  *****************************************************************************/
 #ifdef _TMS320C6400
 #pragma DATA_ALIGN(dct4x4_7, 16);
-static int16_t dct4x4_7[4][4];
+static int16_t dct4x4_7[16];
 
 void x264_macroblock_encode_p4x4( x264_t *h, int i4 )
 {

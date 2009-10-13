@@ -626,9 +626,9 @@ static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
 {
     _mem4(level) = _mem4(dct);
     ZIG(2,0,1) ZIG(3,2,0) ZIG(4,3,0) ZIG(5,1,1)
-    _mem4(level + 6) = _mem4(*dct + 6);
-    _mem8(level + 8) = _mem8(*dct + 8);
-    _mem8(level + 12) = _mem8(*dct + 12);
+    _mem4(level + 6) = _mem4(dct + 6);
+    _mem8(level + 8) = _mem8(dct + 8);
+    _mem8(level + 12) = _mem8(dct + 12);
 }
 #else
 static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
