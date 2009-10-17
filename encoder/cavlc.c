@@ -229,13 +229,11 @@ static void cavlc_qp_delta( x264_t *h, bs_t *s )
     bs_write_se( s, i_dqp );
 }
 
-#ifdef _TMS320C6400
-#pragma DATA_ALIGN(mvp, 4);
-static int16_t mvp[2];
-#endif
 static void cavlc_mb_mvd( x264_t *h, bs_t *s, int i_list, int idx, int width )
 {
-#ifndef _TMS320C6400
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_4( int16_t, mvp, [2] );
+#else
     ALIGNED_4( int16_t mvp[2] );
 #endif
     x264_mb_predict_mv( h, i_list, idx, width, mvp );

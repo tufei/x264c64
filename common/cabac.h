@@ -38,20 +38,8 @@ typedef struct
     uint8_t *p;
     uint8_t *p_end;
 
-#ifdef _TMS320C6400
-    /*
-     * this is really an ugly hack to achieve same alignment since C6x compiler
-     * does not support aligned declaration in a graceful way. fields before in
-     * a 32-bit environment should occupy 28 bytes, we insert another dummy word
-     * to make the f8_bits_encoded 16-byte aligned since the structure is 16-byte
-     * aligned 
-     */
-    int dummy;
-    int f8_bits_encoded;
-#else
     /* aligned for memcpy_aligned starting here */
     ALIGNED_16( int f8_bits_encoded ); // only if using x264_cabac_size_decision()
-#endif
 
     /* context */
     uint8_t state[460];

@@ -25,10 +25,10 @@
 #include <assert.h>
 #include <stdint.h>
 #include "align_check.h"
-#include "../x264.h"
-#include "../encoder/me.h"
-#include "../common/common.h"
-#include "../common/cabac.h"
+#include "x264.h"
+#include "common.h"
+#include "me.h"
+#include "cabac.h"
 
 /****************************************************************************
  * x264_init_align_check:

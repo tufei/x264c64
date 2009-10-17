@@ -271,14 +271,12 @@ static int x264_mb_predict_mv_direct16x16_temporal( x264_t *h )
     return 1;
 }
 
-#ifdef _TMS320C6400
-#pragma DATA_ALIGN(mv, 8);
-static int16_t mv[2][2];
-#endif
 static int x264_mb_predict_mv_direct16x16_spatial( x264_t *h )
 {
     int ref[2];
-#ifndef _TMS320C6400
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_8( int16_t, mv, [2], [2] );
+#else
     ALIGNED_8( int16_t mv[2][2] );
 #endif
     int i_list;
@@ -611,13 +609,6 @@ static inline void x264_mb_mc_1xywh( x264_t *h, int x, int y, int width, int hei
                      mvx, mvy, 2*width, 2*height );
 }
 
-#ifdef _TMS320C6400
-#pragma DATA_ALIGN(tmp0, 16);
-static uint8_t tmp0[16 * 16];
-
-#pragma DATA_ALIGN(tmp1, 16);
-static uint8_t tmp1[16 * 16];
-#endif
 static inline void x264_mb_mc_01xywh( x264_t *h, int x, int y, int width, int height )
 {
     const int i8 = x264_scan8[0]+x+8*y;
@@ -630,10 +621,8 @@ static inline void x264_mb_mc_01xywh( x264_t *h, int x, int y, int width, int he
     int       mvy1   = x264_clip3( h->mb.cache.mv[1][i8][1], h->mb.mv_min[1], h->mb.mv_max[1] );
     int       i_mode = x264_size2pixel[height][width];
     int       i_stride0 = 16, i_stride1 = 16;
-#ifndef _TMS320C6400
     ALIGNED_ARRAY_16( uint8_t, tmp0,[16*16] );
     ALIGNED_ARRAY_16( uint8_t, tmp1,[16*16] );
-#endif
     uint8_t *src0, *src1;
 
     src0 = h->mc.get_ref( tmp0, &i_stride0, h->mb.pic.p_fref[0][i_ref0], h->mb.pic.i_stride[0],

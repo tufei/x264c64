@@ -429,13 +429,11 @@ static inline void x264_cabac_mb_mvd_cpn( x264_t *h, x264_cabac_t *cb, int i_lis
 #endif
 }
 
-#ifdef _TMS320C6400
-#pragma DATA_ALIGN(mvp, 4);
-static int16_t mvp[2];
-#endif
 static NOINLINE uint32_t x264_cabac_mb_mvd( x264_t *h, x264_cabac_t *cb, int i_list, int idx, int width )
 {
-#ifndef _TMS320C6400
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_4( int16_t, mvp, [2] );
+#else
     ALIGNED_4( int16_t mvp[2] );
 #endif
     uint32_t amvd;

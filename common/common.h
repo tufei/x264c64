@@ -391,14 +391,8 @@ struct x264_t
 
     const uint8_t   *chroma_qp_table; /* includes both the nonlinear luma->chroma mapping and chroma_qp_offset */
 
-#ifdef _TMS320C6400
-    /*uint32_t dummy[1];*/  /* hack to satisfy alignment */
-    uint32_t nr_residual_sum[2][64];
-    uint16_t nr_offset[2][64];
-#else
     ALIGNED_16( uint32_t nr_residual_sum[2][64] );
     ALIGNED_16( uint16_t nr_offset[2][64] );
-#endif
     uint32_t        nr_count[2];
 
     /* Slice header */
@@ -447,20 +441,11 @@ struct x264_t
     /* Current MB DCT coeffs */
     struct
     {
-#ifdef _TMS320C6400
-        uint32_t dummy[3];  /* hack to satisfy alignment */
-        int16_t luma16x16_dc[16];
-        int16_t chroma_dc[2][4];
-        // FIXME share memory?
-        int16_t luma8x8[4][64];
-        int16_t luma4x4[16+8][16];
-#else
         ALIGNED_16( int16_t luma16x16_dc[16] );
         ALIGNED_16( int16_t chroma_dc[2][4] );
         // FIXME share memory?
         ALIGNED_16( int16_t luma8x8[4][64] );
         ALIGNED_16( int16_t luma4x4[16+8][16] );
-#endif /* _TMS320C6400 */
     } dct;
 
     /* MB table and cache for current frame/mb */
@@ -538,11 +523,7 @@ struct x264_t
         /* current value */
         int     i_type;
         int     i_partition;
-#ifdef _TMS320C6400
-        uint8_t i_sub_partition[4];
-#else
         ALIGNED_4( uint8_t i_sub_partition[4] );
-#endif
         int     b_transform_8x8;
 
         int     i_cbp_luma;
@@ -567,26 +548,6 @@ struct x264_t
             /* space for p_fenc and p_fdec */
 #define FENC_STRIDE 16
 #define FDEC_STRIDE 32
-#ifdef _TMS320C6400
-            uint32_t dummy[3]; /* alignment */
-            uint8_t fenc_buf[24*FENC_STRIDE];
-            uint8_t fdec_buf[27*FDEC_STRIDE];
-
-            /* i4x4 and i8x8 backup data, for skipping the encode stage when possible */
-            uint8_t i4x4_fdec_buf[16*16];
-            uint8_t i8x8_fdec_buf[16*16];
-            int16_t i8x8_dct_buf[3][64];
-            int16_t i4x4_dct_buf[15][16];
-            uint32_t i4x4_nnz_buf[4];
-            uint32_t i8x8_nnz_buf[4];
-            int i4x4_cbp;
-            int i8x8_cbp;
-
-            /* Psy trellis DCT data */
-            uint32_t dummy1[2]; /* alignment */
-            int16_t fenc_dct8[4][64];
-            int16_t fenc_dct4[16][16];
-#else
             ALIGNED_16( uint8_t fenc_buf[24*FENC_STRIDE] );
             ALIGNED_16( uint8_t fdec_buf[27*FDEC_STRIDE] );
 
@@ -603,7 +564,6 @@ struct x264_t
             /* Psy trellis DCT data */
             ALIGNED_16( int16_t fenc_dct8[4][64] );
             ALIGNED_16( int16_t fenc_dct4[16][16] );
-#endif /* _TMS320C6400 */
 
             /* Psy RD SATD scores */
             int fenc_satd[4][4];
@@ -637,20 +597,6 @@ struct x264_t
             /* i_non_zero_count if available else 0x80 */
             uint8_t non_zero_count[X264_SCAN8_SIZE];
 
-#ifdef _TMS320C6400
-            /* -1 if unused, -2 if unavailable */
-            int8_t ref[2][X264_SCAN8_SIZE];
-
-            /* 0 if not available */
-            int16_t mv[2][X264_SCAN8_SIZE][2];
-            int16_t mvd[2][X264_SCAN8_SIZE][2];
-
-            /* 1 if SKIP or DIRECT. set only for B-frames + CABAC */
-            int8_t skip[X264_SCAN8_SIZE];
-            int16_t direct_mv[2][X264_SCAN8_SIZE][2];
-            int8_t  direct_ref[2][X264_SCAN8_SIZE];
-            int16_t pskip_mv[2];
-#else
             /* -1 if unused, -2 if unavailable */
             ALIGNED_4( int8_t ref[2][X264_SCAN8_SIZE] );
 
@@ -664,7 +610,6 @@ struct x264_t
             ALIGNED_16( int16_t direct_mv[2][X264_SCAN8_SIZE][2] );
             ALIGNED_4( int8_t  direct_ref[2][X264_SCAN8_SIZE] );
             ALIGNED_4( int16_t pskip_mv[2] );
-#endif /* _TMS320C6400 */
 
             /* number of neighbors (top and left) that used 8x8 dct */
             int     i_neighbour_transform_size;

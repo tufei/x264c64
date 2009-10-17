@@ -102,18 +102,15 @@ static inline int sum_sa8d( x264_t *h, int pixel, int x, int y )
 /* Hadamard transform is recursive, so a SATD+SA8D can be done faster by taking advantage of this fact. */
 /* This optimization can also be used in non-RD transform decision. */
 
-#ifdef _TMS320C6400
-#pragma DATA_ALIGN(zero, 16);
-static uint8_t zero[16];
-#endif
 static inline int ssd_plane( x264_t *h, int size, int p, int x, int y )
 {
-#ifndef _TMS320C6400
     ALIGNED_16(static uint8_t zero[16]);
-#endif
     int satd = 0;
     uint8_t *fdec = h->mb.pic.p_fdec[p] + x + y*FDEC_STRIDE;
     uint8_t *fenc = h->mb.pic.p_fenc[p] + x + y*FENC_STRIDE;
+#ifdef _TMS320C6400
+    assert(0 == ((intptr_t)zero & 15));
+#endif
     if( p == 0 && h->mb.i_psy_rd )
     {
         /* If the plane is smaller than 8x8, we can't do an SA8D; this probably isn't a big problem. */
