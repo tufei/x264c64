@@ -613,12 +613,15 @@ static void inline x264_psy_trellis_init( x264_t *h, int do_both_dct )
 {
     ALIGNED_ARRAY_16( int16_t, dct8x8,[4],[64] );
     ALIGNED_ARRAY_16( int16_t, dct4x4,[16],[16] );
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_16( uint8_t, zero, [16*FDEC_STRIDE] );
+#else
     ALIGNED_16( static uint8_t zero[16*FDEC_STRIDE] ) = {0};
+#endif
     int i;
 
 #ifdef _TMS320C6400
-    assert(0 == ((intptr_t)zero & 15));
-    memset(zero, 0, sizeof(zero));
+    memset(zero, 0, 16 * FDEC_STRIDE * sizeof(uint8_t));
 #endif
     if( do_both_dct || h->mb.b_transform_8x8 )
     {
@@ -637,12 +640,15 @@ static void inline x264_psy_trellis_init( x264_t *h, int do_both_dct )
 /* Pre-calculate fenc satd scores for psy RD, minus DC coefficients */
 static inline void x264_mb_cache_fenc_satd( x264_t *h )
 {
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_16( uint8_t, zero, [16] );
+#else
     ALIGNED_16( static uint8_t zero[16] ) = {0};
+#endif
     uint8_t *fenc;
     int x, y, satd_sum = 0, sa8d_sum = 0;
 #ifdef _TMS320C6400
-    assert(0 == ((intptr_t)zero & 15));
-    _mem8(zero) = 0; _mem8(zero + 8) = 0;
+    _amem8(zero) = 0; _amem8(zero + 8) = 0;
 #endif
     if( h->param.analyse.i_trellis == 2 && h->mb.i_psy_trellis )
         x264_psy_trellis_init( h, h->param.analyse.b_transform_8x8 );

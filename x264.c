@@ -107,8 +107,8 @@ const char *main_arguments[] =
     "--mixed-refs",
     "--profile", "baseline",
 #endif
-    "-o", "suzie.264",
-    "C:\\CCStudio_v3.1\\suzie_qcif.y4m"
+    "-o", "football.264",
+    "C:\\CCStudio_v3.1\\football_sif.y4m"
 };
 
 /* this is a hack function to initialize the arguments to the main function */

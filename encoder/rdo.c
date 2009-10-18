@@ -104,12 +104,16 @@ static inline int sum_sa8d( x264_t *h, int pixel, int x, int y )
 
 static inline int ssd_plane( x264_t *h, int size, int p, int x, int y )
 {
+#ifdef _TMS320C6400
+    ALIGNED_ARRAY_16(uint8_t, zero, [16]);
+#else
     ALIGNED_16(static uint8_t zero[16]);
+#endif
     int satd = 0;
     uint8_t *fdec = h->mb.pic.p_fdec[p] + x + y*FDEC_STRIDE;
     uint8_t *fenc = h->mb.pic.p_fenc[p] + x + y*FENC_STRIDE;
 #ifdef _TMS320C6400
-    assert(0 == ((intptr_t)zero & 15));
+    _amem8(zero) = 0; _amem8(zero + 8) = 0;
 #endif
     if( p == 0 && h->mb.i_psy_rd )
     {

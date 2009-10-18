@@ -22,11 +22,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifdef _TMS320C6400
-#include "../common/common.h"
-#else
 #include "common/common.h"
-#endif
 #include "macroblock.h"
 #include "me.h"
 
@@ -216,7 +212,7 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         for( i = 0; i < i_mvc; i++ )
         {
 #ifdef _TMS320C6400
-            if( _mem4(mvc[i]) && (bmv - _mem4(mvc[i])) )
+            if( _mem4_const(mvc[i]) && (bmv - _mem4_const(mvc[i])) )
 #else
             if( *(uint32_t*)mvc[i] && (bmv - *(uint32_t*)mvc[i]) )
 #endif
@@ -571,10 +567,14 @@ me_hex2:
             uint16_t *sums_base = m->integral;
             /* due to a GCC bug on some platforms (win32?), zero[] may not actually be aligned.
              * this is not a problem because it is not used for any SSE instructions. */
+#ifdef _TMS320C6400
+            ALIGNED_ARRAY_16( uint8_t, zero, [8*FENC_STRIDE] );
+#else
             ALIGNED_16( static uint8_t zero[8*FENC_STRIDE] );
+#endif
             ALIGNED_ARRAY_16( int, enc_dc,[4] );
 #ifdef _TMS320C6400
-            assert(0 == ((intptr_t)zero & 15));
+            memset(zero, 0, 8 * FENC_STRIDE * sizeof(uint8_t));
 #endif
             int sad_size = i_pixel <= PIXEL_8x8 ? PIXEL_8x8 : PIXEL_4x4;
             int delta = x264_pixel_size[sad_size].w;
@@ -1174,4 +1174,3 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
     x264_macroblock_cache_mv ( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx, bmy) );
     x264_macroblock_cache_mvd( h, block_idx_x[i4], block_idx_y[i4], bw, bh, i_list, pack16to32_mask(bmx - m->mvp[0], bmy - m->mvp[1]) );
 }
-
