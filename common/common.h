@@ -34,6 +34,7 @@
 #define X264_MIN4(a,b,c,d) X264_MIN((a),X264_MIN3((b),(c),(d)))
 #define X264_MAX4(a,b,c,d) X264_MAX((a),X264_MAX3((b),(c),(d)))
 #define XCHG(type,a,b) do{ type t = a; a = b; b = t; } while(0)
+#define IS_DISPOSABLE(type) ( type == X264_TYPE_B )
 #define FIX8(f) ((int)(f*(1<<8)+.5))
 
 #define CHECKED_MALLOC( var, size )\
@@ -254,10 +255,19 @@ typedef struct
 
     int b_ref_pic_list_reordering_l0;
     int b_ref_pic_list_reordering_l1;
-    struct {
+    struct
+    {
         int idc;
         int arg;
     } ref_pic_list_order[2][16];
+
+    int i_mmco_remove_from_end;
+    int i_mmco_command_count;
+    struct /* struct for future expansion */
+    {
+        int i_difference_of_pic_nums;
+        int i_poc;
+    } mmco[16];
 
     int i_cabac_init_idc;
 
@@ -639,8 +649,8 @@ struct x264_t
         int16_t dist_scale_factor[16][2];
         int16_t bipred_weight[32][4];
         /* maps fref1[0]'s ref indices into the current list0 */
-        int8_t  map_col_to_list0_buf[2]; // for negative indices
-        int8_t  map_col_to_list0[16];
+#define map_col_to_list0(col) h->mb.map_col_to_list0[col+2]
+        int8_t  map_col_to_list0[18];
     } mb;
 
     /* rate control encoding only */

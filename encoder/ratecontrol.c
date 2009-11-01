@@ -272,7 +272,9 @@ void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame )
 void x264_adaptive_quant( x264_t *h )
 {
     x264_emms();
-    h->mb.i_qp = x264_clip3( h->rc->f_qpm + h->fenc->f_qp_offset[h->mb.i_mb_xy] + .5, h->param.rc.i_qp_min, h->param.rc.i_qp_max );
+    /* MB-tree currently doesn't adjust quantizers in B-frames. */
+    float qp_offset = h->sh.i_type == SLICE_TYPE_B ? h->fenc->f_qp_offset_aq[h->mb.i_mb_xy] : h->fenc->f_qp_offset[h->mb.i_mb_xy];
+    h->mb.i_qp = x264_clip3( h->rc->f_qpm + qp_offset + .5, h->param.rc.i_qp_min, h->param.rc.i_qp_max );
 }
 
 int x264_macroblock_tree_read( x264_t *h, x264_frame_t *frame )
@@ -549,8 +551,13 @@ int x264_ratecontrol_new( x264_t *h )
 
             /* since B-adapt doesn't (yet) take into account B-pyramid,
              * the converse is not a problem */
-            if( strstr( opts, "b_pyramid=1" ) && !h->param.b_bframe_pyramid )
-                x264_log( h, X264_LOG_WARNING, "1st pass used B-pyramid, 2nd doesn't\n" );
+            if( h->param.i_bframe )
+            {
+                char buf[12];
+                sprintf( buf, "b_pyramid=%d", h->param.i_bframe_pyramid );
+                if( !strstr( opts, buf ) )
+                    x264_log( h, X264_LOG_WARNING, "different B-pyramid setting than 1st pass\n" );
+            }
 
             if( ( p = strstr( opts, "keyint=" ) ) && sscanf( p, "keyint=%d", &i )
                 && h->param.i_keyint_max != i )
@@ -733,7 +740,7 @@ parse_error:
         if( i )
         {
             rc[i] = rc[0];
-            memcpy( &h->thread[i]->param, &h->param, sizeof(x264_param_t) );
+            h->thread[i]->param = h->param;
             h->thread[i]->mb.b_variable_qp = h->mb.b_variable_qp;
         }
     }
@@ -1370,7 +1377,7 @@ static double get_qscale(x264_t *h, ratecontrol_entry_t *rce, double rate_factor
     // avoid NaN's in the rc_eq
     if(!isfinite(q) || rce->tex_bits + rce->mv_bits == 0)
 #endif
-        q = rcc->last_qscale;
+        q = rcc->last_qscale_for[rce->pict_type];
     else
     {
         rcc->last_rceq = q;
@@ -1883,7 +1890,7 @@ static float rate_estimate_qscale( x264_t *h )
 
                 q = x264_clip3f(q, lmin, lmax);
             }
-            else if( h->param.rc.i_rc_method == X264_RC_CRF )
+            else if( h->param.rc.i_rc_method == X264_RC_CRF && rcc->qcompress != 1 )
             {
                 q = qp2qscale( ABR_INIT_QP ) / fabs( h->param.rc.f_ip_factor );
             }
@@ -1897,7 +1904,7 @@ static float rate_estimate_qscale( x264_t *h )
         rcc->last_qscale = q;
 
         if( !(rcc->b_2pass && !rcc->b_vbv) && h->fenc->i_frame == 0 )
-            rcc->last_qscale_for[SLICE_TYPE_P] = q;
+            rcc->last_qscale_for[SLICE_TYPE_P] = q * fabs( h->param.rc.f_ip_factor );
 
         if( rcc->b_2pass && rcc->b_vbv )
             rcc->frame_size_planned = qscale2bits(&rce, q);

@@ -6,20 +6,31 @@
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Anton Mitrofanov <BugMaster@narod.ru>
 ;*
-;* This program is free software; you can redistribute it and/or modify
-;* it under the terms of the GNU General Public License as published by
-;* the Free Software Foundation; either version 2 of the License, or
-;* (at your option) any later version.
+;* Permission to use, copy, modify, and/or distribute this software for any
+;* purpose with or without fee is hereby granted, provided that the above
+;* copyright notice and this permission notice appear in all copies.
 ;*
-;* This program is distributed in the hope that it will be useful,
-;* but WITHOUT ANY WARRANTY; without even the implied warranty of
-;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;* GNU General Public License for more details.
-;*
-;* You should have received a copy of the GNU General Public License
-;* along with this program; if not, write to the Free Software
-;* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
+;* THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+;* WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+;* MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+;* ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+;* WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+;* ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+;* OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ;*****************************************************************************
+
+; This is a header file for the x264ASM assembly language, which uses
+; NASM/YASM syntax combined with a large number of macros to provide easy
+; abstraction between different calling conventions (x86_32, win64, linux64).
+; It also has various other useful features to simplify writing the kind of
+; DSP functions that are most often used in x264.
+
+; Unlike the rest of x264, this file is available under an ISC license, as it
+; has significant usefulness outside of x264 and we want it to be available
+; to the largest audience possible.  Of course, if you modify it for your own
+; purposes to add a new feature, we strongly encourage contributing a patch
+; as this feature might be useful for others as well.  Send patches or ideas
+; to x264-devel@videolan.org .
 
 %ifdef ARCH_X86_64
     %ifidn __OUTPUT_FORMAT__,win32
@@ -85,7 +96,7 @@
 ; PROLOGUE can also be invoked by adding the same options to cglobal
 
 ; e.g.
-; cglobal foo, 2,3, dst, src, tmp
+; cglobal foo, 2,3,0, dst, src, tmp
 ; declares a function (foo), taking two args (dst and src) and one local variable (tmp)
 
 ; TODO Some functions can use some args directly from the stack. If they're the
@@ -222,6 +233,7 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7
             CAT_UNDEF arg_name %+ %%i, d
             CAT_UNDEF arg_name %+ %%i, w
             CAT_UNDEF arg_name %+ %%i, b
+            CAT_UNDEF arg_name %+ %%i, m
             CAT_UNDEF arg_name, %%i
             %assign %%i %%i+1
         %endrep
@@ -233,6 +245,7 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7
         %xdefine %1d r %+ %%i %+ d
         %xdefine %1w r %+ %%i %+ w
         %xdefine %1b r %+ %%i %+ b
+        %xdefine %1m r %+ %%i %+ m
         CAT_XDEFINE arg_name, %%i, %1
         %assign %%i %%i+1
         %rotate 1
@@ -387,7 +400,7 @@ DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
     %endif
 %endmacro
 
-%macro PROLOGUE 2-4+ ; #args, #regs, arg_names...
+%macro PROLOGUE 2-4+ ; #args, #regs, #xmm_regs, arg_names...
     ASSERT %2 >= %1
     %assign regs_used %2
     ASSERT regs_used <= 7
@@ -434,9 +447,9 @@ DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
 ; Symbol prefix for C linkage
 %macro cglobal 1-2+
     %ifdef PREFIX
-        %xdefine %1.skip_prologue _%1.skip_prologue
-        %xdefine %1 _%1
+        %xdefine %1 _ %+ %1
     %endif
+    %xdefine %1.skip_prologue %1 %+ .skip_prologue
     %ifidn __OUTPUT_FORMAT__,elf
         global %1:function hidden
     %else
@@ -463,9 +476,6 @@ DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
 %ifidn __OUTPUT_FORMAT__,elf
 SECTION .note.GNU-stack noalloc noexec nowrite progbits
 %endif
-
-%assign FENC_STRIDE 16
-%assign FDEC_STRIDE 32
 
 ; merge mmx and sse*
 
@@ -573,7 +583,10 @@ INIT_MMX
 %endrep
 %endmacro
 
-%macro SAVE_MM_PERMUTATION 1
+; If SAVE_MM_PERMUTATION is placed at the end of a function and given the
+; function name, then any later calls to that function will automatically
+; load the permutation, so values can be returned in mmregs.
+%macro SAVE_MM_PERMUTATION 1 ; name to save as
     %assign %%i 0
     %rep num_mmregs
     CAT_XDEFINE %1_m, %%i, m %+ %%i
@@ -581,7 +594,7 @@ INIT_MMX
     %endrep
 %endmacro
 
-%macro LOAD_MM_PERMUTATION 1
+%macro LOAD_MM_PERMUTATION 1 ; name to load from
     %assign %%i 0
     %rep num_mmregs
     CAT_XDEFINE m, %%i, %1_m %+ %%i
@@ -597,7 +610,7 @@ INIT_MMX
     %endif
 %endmacro
 
-;Substitutions that reduce instruction size but are functionally equivalent
+; Substitutions that reduce instruction size but are functionally equivalent
 %macro add 2
     %ifnum %2
         %if %2==128

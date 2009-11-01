@@ -12,7 +12,23 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
        encoder/set.c encoder/macroblock.c encoder/cabac.c \
        encoder/cavlc.c encoder/encoder.c encoder/lookahead.c
 
-SRCCLI = x264.c matroska.c muxers.c
+SRCCLI = x264.c input/yuv.c input/y4m.c output/raw.c \
+         output/matroska.c output/matroska_ebml.c
+
+MUXERS := $(shell grep -E "(IN|OUT)PUT" config.h)
+
+# Optional muxer module sources
+ifneq ($(findstring AVIS_INPUT, $(MUXERS)),)
+SRCCLI += input/avis.c
+endif
+
+ifneq ($(findstring HAVE_PTHREAD, $(CFLAGS)),)
+SRCCLI += input/thread.c
+endif
+
+ifneq ($(findstring MP4_OUTPUT, $(MUXERS)),)
+SRCCLI += output/mp4.c
+endif
 
 # Visualization sources
 ifeq ($(VIS),yes)
@@ -121,7 +137,7 @@ SRC2 = $(SRCS) $(SRCCLI)
 OPT0 = --crf 30 -b1 -m1 -r1 --me dia --no-cabac --direct temporal --ssim --no-weightb
 OPT1 = --crf 16 -b2 -m3 -r3 --me hex --no-8x8dct --direct spatial --no-dct-decimate -t0  --slice-max-mbs 50
 OPT2 = --crf 26 -b4 -m5 -r2 --me hex --cqm jvt --nr 100 --psnr --no-mixed-refs --b-adapt 2 --slice-max-size 1500
-OPT3 = --crf 18 -b3 -m9 -r5 --me umh -t1 -A all --b-pyramid --direct auto --no-fast-pskip --no-mbtree
+OPT3 = --crf 18 -b3 -m9 -r5 --me umh -t1 -A all --b-pyramid normal --direct auto --no-fast-pskip --no-mbtree
 OPT4 = --crf 22 -b3 -m7 -r4 --me esa -t2 -A all --psy-rd 1.0:1.0 --slices 4
 OPT5 = --frames 50 --crf 24 -b3 -m10 -r3 --me tesa -t2
 OPT6 = --frames 50 -q0 -m9 -r2 --me hex -Aall
