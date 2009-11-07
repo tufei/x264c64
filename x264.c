@@ -880,8 +880,10 @@ static int  Parse( int argc, char **argv,
                     return -1;
 #endif
                 }
+#ifndef _TMS320C6400
                 else if( !strncasecmp(optarg + strlen(optarg) - 4, ".mkv", 4) )
                     output = mkv_output;
+#endif
                 if( !strcmp(optarg, "-") )
                     opt->hout = stdout;
                 else if( output.open_file( optarg, &opt->hout ) )
@@ -1291,7 +1293,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         int ret_read;
 
         c64_timer_hold();
-        ret_read = p_read_frame( &pic, opt->hin, i_frame + opt->i_seek );
+        ret_read = input.read_frame( &pic, opt->hin, i_frame + opt->i_seek );
         c64_timer_go();
         if( ret_read )
             break;

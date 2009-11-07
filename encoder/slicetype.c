@@ -1120,7 +1120,7 @@ int x264_rc_analyse_slice( x264_t *h )
     int cost;
 
 #ifdef _TMS320C6400
-    memset(frames, 0, sizeof(frames));
+    x264_frame_t **frames;
 #endif
 
     if( IS_X264_TYPE_I(h->fenc->i_type) )
@@ -1133,7 +1133,11 @@ int x264_rc_analyse_slice( x264_t *h )
         b  = (h->fenc->i_poc - h->fref0[0]->i_poc)/2;
     }
     /* We don't need to assign p0/p1 since we are not performing any real analysis here. */
+#ifdef _TMS320C6400
+    frames = &h->fenc - b;
+#else
     x264_frame_t **frames = &h->fenc - b;
+#endif
 
     /* cost should have been already calculated by x264_slicetype_decide */
     cost = frames[b]->i_cost_est[b-p0][p1-b];

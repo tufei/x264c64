@@ -1060,6 +1060,15 @@ void x264_macroblock_cache_load( x264_t *h, int i_mb_x, int i_mb_y )
         h->mb.i_mb_type_top = -1;
         h->mb.cache.i_cbp_top = -1;
 
+#ifdef _TMS320C6400
+        /* load intra4x4 */
+        _mem4(&h->mb.cache.intra4x4_pred_mode[x264_scan8[0] - 8]) = 0xFFFFFFFFU;
+
+        /* load non_zero_count */
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[0] - 8]) =
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[16+0] - 9]) =
+        _mem4(&h->mb.cache.non_zero_count[x264_scan8[16+4] - 9]) = 0x80808080U;
+#else
         /* load intra4x4 */
         *(uint32_t*)&h->mb.cache.intra4x4_pred_mode[x264_scan8[0] - 8] = 0xFFFFFFFFU;
 
@@ -1067,6 +1076,7 @@ void x264_macroblock_cache_load( x264_t *h, int i_mb_x, int i_mb_y )
         *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[0] - 8] =
         *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[16+0] - 9] =
         *(uint32_t*)&h->mb.cache.non_zero_count[x264_scan8[16+4] - 9] = 0x80808080U;
+#endif /* _TMS320C6400 */
     }
 
     if( i_mb_x > 0 && i_mb_xy > h->sh.i_first_mb )

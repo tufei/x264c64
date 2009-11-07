@@ -210,119 +210,133 @@ static void mc_copy( uint8_t *src, int i_src_stride, uint8_t *dst, int i_dst_str
     }
 }
 
-/*((pix)[-2*d] + (pix)[3*d] - 5*((pix)[-d] + (pix)[2*d]) + 20*((pix)[0] + (pix)[d]))*/
-static inline uint64_t tap_filter_8(const uint8_t *pix, int stride) 
+static inline uint64_t tap_filter_8(uint8_t *pix, int x, int d)
 {
-    uint32_t temp[2], data;
-    uint64_t output;
-    double input;
-    register const uint32_t m5 = 0x05050505U;
-    register const uint32_t m20 = 0x14141414U;
+    uint32_t m5 = 0x05050505U;
+    uint32_t m20 = 0x14141414U;
+    uint32_t s4;
+    uint64_t ret, tmp0, tmp1;
 
-    input = _mpyu4(_mem4_const(pix), m20);
-    output = *(uint64_t *)&input;
-    input = _mpyu4(_mem4_const(&pix[stride]), m20);
-    output += *(uint64_t *)&input;
+    tmp0 = _mpyu4ll(_mem4_const(&pix[x]), m20);
+    tmp1 = _mpyu4ll(_mem4_const(&pix[x + d]), m20);
+    ret = _itoll(_add2(_hill(tmp0), _hill(tmp1)), _add2(_loll(tmp0), _loll(tmp1)));
 
-    data = _mem4_const(&pix[-2 * stride]);
-    temp[0] = _unpklu4(data); temp[1] = _unpkhu4(data);
-    output += *(uint64_t *)temp;
-    data = _mem4_const(&pix[3 * stride]);
-    temp[0] = _unpklu4(data); temp[1] = _unpkhu4(data);
-    output += *(uint64_t *)temp;
+    s4 = _mem4_const(&pix[x - 2 * d]);
+    ret = _itoll(_add2(_hill(ret), _unpkhu4(s4)), _add2(_loll(ret), _unpklu4(s4)));
 
-    input = _mpyu4(_mem4_const(&pix[2 * stride]), m5);
-    output -= *(uint64_t *)&input;
-    input = _mpyu4(_mem4_const(&pix[-1 * stride]), m5);
-    output -= *(uint64_t *)&input;
+    s4 = _mem4_const(&pix[x + 3 * d]);
+    ret = _itoll(_add2(_hill(ret), _unpkhu4(s4)), _add2(_loll(ret), _unpklu4(s4)));
 
-    return output;
+    tmp0 = _mpyu4ll(_mem4_const(&pix[x - d]), m5);
+    tmp1 = _mpyu4ll(_mem4_const(&pix[x + 2 * d]), m5);
+    ret = _itoll(_sub2(_hill(ret), _hill(tmp0)), _sub2(_loll(ret), _loll(tmp0)));
+    ret = _itoll(_sub2(_hill(ret), _hill(tmp1)), _sub2(_loll(ret), _loll(tmp1)));
+
+    return ret;
 }
 
-static inline uint64_t tap_filter_16(const uint16_t *pix, int stride) 
+static inline uint64_t tap_filter_16(int16_t *pix, int x, int d)
 {
-    uint32_t temp[2], data;
-    uint64_t output;
-    double input;
-    register const uint32_t m5 = 0x00050005U;
-    register const uint32_t m20 = 0x00140014U;
+    uint32_t m5 = 0x00050005U;
+    uint32_t m20 = 0x00140014U;
+    uint64_t s4;
+    uint64_t ret, tmp0, tmp1, tmp2, tmp3;
+    int32_t t[4];
 
-    input = _mpy2(_mem4_const(pix), m20);
-    output = *(uint64_t *)&input;
-    input = _mpy2(_mem4_const(&pix[stride]), m20);
-    output += *(uint64_t *)&input;
+    s4 = _mem8_const(&pix[x]);
+    tmp0 = _mpy2ll(_loll(s4), m20);
+    tmp1 = _mpy2ll(_hill(s4), m20);
+    s4 = _mem8_const(&pix[x + d]);
+    tmp2 = _mpy2ll(_loll(s4), m20);
+    tmp3 = _mpy2ll(_hill(s4), m20);
+    t[0] = _loll(tmp2) + _loll(tmp0);
+    t[1] = _hill(tmp2) + _hill(tmp0);
+    t[2] = _loll(tmp3) + _loll(tmp1);
+    t[3] = _hill(tmp3) + _hill(tmp1);
 
-    temp[0] = pix[-2 * stride];
-    temp[1] = pix[-2 * stride + 1];
-    output += *(uint64_t *)temp;
-    temp[0] = pix[3 * stride];
-    temp[1] = pix[3 * stride + 1];
-    output += *(uint64_t *)temp;
+    s4 = _mem8_const(&pix[x - 2 * d]);
+    t[0] += (int16_t)_loll(s4); t[1] += _loll(s4) >> 16;
+    t[2] += (int16_t)_hill(s4); t[3] += _hill(s4) >> 16;
 
-    input = _mpy2(_mem4_const(&pix[2 * stride]), m5);
-    output -= *(uint64_t *)&input;
-    input = _mpy2(_mem4_const(&pix[-1 * stride]), m5);
-    output -= *(uint64_t *)&input;
+    s4 = _mem8_const(&pix[x + 3 * d]);
+    t[0] += (int16_t)_loll(s4); t[1] += _loll(s4) >> 16;
+    t[2] += (int16_t)_hill(s4); t[3] += _hill(s4) >> 16;
 
-    return output;
+    s4 = _mem8_const(&pix[x - d]);
+    tmp0 = _mpy2ll(_loll(s4), m5);
+    tmp1 = _mpy2ll(_hill(s4), m5);
+    s4 = _mem8_const(&pix[x + 2 * d]);
+    tmp2 = _mpy2ll(_loll(s4), m5);
+    tmp3 = _mpy2ll(_hill(s4), m5);
+    t[0] -= _loll(tmp2) + _loll(tmp0);
+    t[1] -= _hill(tmp2) + _hill(tmp0);
+    t[2] -= _loll(tmp3) + _loll(tmp1);
+    t[3] -= _hill(tmp3) + _hill(tmp1);
+    t[0] = (t[0] + 512) >> 10;
+    t[1] = (t[1] + 512) >> 10;
+    t[2] = (t[2] + 512) >> 10;
+    t[3] = (t[3] + 512) >> 10;
+    ret = _itoll(_spack2(t[3], t[2]), _spack2(t[1], t[0]));
+
+    return ret;
 }
 
-static void hpel_filter_c64( uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src, int stride, int width, int height, int16_t *buf )
+#define TAPFILTER(pix, d) ((pix)[x-2*d] + (pix)[x+3*d] - 5*((pix)[x-d] + (pix)[x+2*d]) + 20*((pix)[x] + (pix)[x+d]))
+static void hpel_filter_c64( uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src,
+                         int stride, int width, int height, int16_t *buf )
 {
-    int x, y;
-    uint64_t v;
-    register uint64_t round;
-    register uint64_t mask;
-
-    uint8_t *dsth_buf = dsth;
-    uint8_t *dstv_buf = dstv;
-    uint8_t *dstc_buf = dstc;
-    uint8_t *src_buf = src;
-
-    for(y = 0; y < height; y++) 
+    int x, y, v;
+    START_COUNTER
+    for( y = 0; y < height; y++ )
     {
-        round = 0x0010001000100010ULL;
-        mask = 0x07FF07FF07FF07FFULL;
-        for(x = -2; x < (width + 3 - 4); x += 4)
+#if 1
+        for( x = -2; x < width + 2; x += 4 )
         {
-            v = tap_filter_8(&src[x], stride);
-            _mem8(&buf[x + 2]) = v;
-            v += round;
-            v = (v >> 5) & mask;
-            _mem4(&dstv[x]) = _spacku4(_hi(*(double *)&v), _lo(*(double *)&v));
-        }
-        v = tap_filter_8(&src[x], stride);
-        buf[x + 2] = (int16_t)_lo(*(double *)&v);
-        v += round;
-        v = (v >> 5) & mask;
-        dstv[x] = (uint8_t)_spacku4(0, _lo(*(double *)&v));
+            uint64_t v4 = tap_filter_8(src, x, stride);
+            uint32_t a2 = 0x00100010U;
 
-        for(x = 0; x < width; x += 4) 
-        {
-            v = tap_filter_8(&src[x], 1);
-            v += round;
-            v = (v >> 5) & mask;
-            _mem4(&dsth[x]) = _spacku4(_hi(*(double *)&v), _lo(*(double *)&v));
+            _mem4(&dstv[x]) = _spacku4(_shr2(_add2(_hill(v4), a2), 5), _shr2(_add2(_loll(v4), a2), 5));
+            _mem8(&buf[x + 2]) = v4;
         }
+        x = width + 2;
+        v = TAPFILTER(src,stride);
+        dstv[x] = x264_clip_uint8((v + 16) >> 5);
+        buf[x + 2] = v;
+#if 0
+        for( x = 0; x < width; x += 4 )
+        {
+            uint64_t v4 = tap_filter_16(buf + 2, x, 1);
+            _mem4(&dstc[x]) = _spacku4(_hill(v4), _loll(v4));
+        }
+#else
+        for( x=0; x<width; x++ )
+            dstc[x] = x264_clip_uint8((TAPFILTER(buf+2,1) + 512) >> 10);
+#endif
+        for( x = 0; x < width; x += 4 )
+        {
+            uint64_t v4 = tap_filter_8(src, x, 1);
+            uint32_t a2 = 0x00100010U;
 
-        round = 0x0000020000000200ULL;
-        mask = 0x003FFFFF003FFFFFULL;
-        for(x = 0; x < width; x += 4) 
-        {
-            uint64_t u = tap_filter_16((const uint16_t *)&buf[x + 2 + 2], 1);
-            v = tap_filter_16((const uint16_t *)&buf[x + 2], 1);
-            v += round;
-            v = (v >> 10) & mask;
-            u += round;
-            u = (u >> 10) & mask;
-            _mem4(&dstc[x]) = _spacku4(_spack2(_hi(*(double *)&u), _lo(*(double *)&u)), 
-                _spack2(_hi(*(double *)&v), _lo(*(double *)&v)));
+            _mem4(&dsth[x]) = _spacku4(_shr2(_add2(_hill(v4), a2), 5), _shr2(_add2(_loll(v4), a2), 5));
         }
+#else
+        for( x=-2; x<width+3; x++ )
+        {
+            int v = TAPFILTER(src,stride);
+            dstv[x] = x264_clip_uint8((v + 16) >> 5);
+            buf[x+2] = v;
+        }
+        for( x=0; x<width; x++ )
+            dstc[x] = x264_clip_uint8((TAPFILTER(buf+2,1) + 512) >> 10);
+        for( x=0; x<width; x++ )
+            dsth[x] = x264_clip_uint8((TAPFILTER(src,1) + 16) >> 5);
+#endif
         dsth += stride;
         dstv += stride;
         dstc += stride;
         src += stride;
     }
+    STOP_COUNTER
 }
 
 static const int hpel_ref0[16] = {0,1,1,1,0,1,1,1,2,3,3,3,0,1,1,1};
