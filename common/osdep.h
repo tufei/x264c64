@@ -87,11 +87,13 @@
 #define UNUSED __attribute__((unused))
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define NOINLINE __attribute__((noinline))
+#define MAY_ALIAS __attribute__((may_alias))
 #define x264_constant_p(x) __builtin_constant_p(x)
 #else
 #define UNUSED
 #define ALWAYS_INLINE inline
 #define NOINLINE
+#define MAY_ALIAS
 #define x264_constant_p(x) 0
 #endif
 
@@ -169,6 +171,7 @@ static inline int x264_pthread_create( x264_pthread_t *t, void *a, void *(*f)(vo
 
 #ifdef WORDS_BIGENDIAN
 #define endian_fix(x) (x)
+#define endian_fix64(x) (x)
 #define endian_fix32(x) (x)
 #define endian_fix16(x) (x)
 #else
@@ -178,45 +181,39 @@ static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
     asm("bswap %0":"+r"(x));
     return x;
 }
-static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
-{
-    asm("bswap %0":"+r"(x));
-    return x;
-}
 #elif defined(__GNUC__) && defined(HAVE_ARMV6)
-static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
+static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     asm("rev %0, %0":"+r"(x));
     return x;
 }
-#define endian_fix32 endian_fix
 #elif defined(_TMS320C6400)
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     return _swap4(_packlh2(x, x));
-}
-
-static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
-{
-    if( WORD_SIZE == 8 )
-        return endian_fix32(x>>(WORD_SIZE<<2)) + ((uint64_t)endian_fix32(x)<<(WORD_SIZE<<2));
-    else
-        return endian_fix32(x);
 }
 #else
 static ALWAYS_INLINE uint32_t endian_fix32( uint32_t x )
 {
     return (x<<24) + ((x<<8)&0xff0000) + ((x>>8)&0xff00) + (x>>24);
 }
-
-static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
+#endif
+#if defined(__GNUC__) && defined(ARCH_X86_64)
+static ALWAYS_INLINE uint64_t endian_fix64( uint64_t x )
 {
-    if( WORD_SIZE == 8 )
-        return endian_fix32(x>>32) + ((uint64_t)endian_fix32(x)<<32);
-    else
-        return endian_fix32(x);
+    asm("bswap %0":"+r"(x));
+    return x;
+}
+#else
+static ALWAYS_INLINE uint64_t endian_fix64( uint64_t x )
+{
+    return endian_fix32(x>>32) + ((uint64_t)endian_fix32(x)<<32);
 }
 #endif
+static ALWAYS_INLINE intptr_t endian_fix( intptr_t x )
+{
+    return WORD_SIZE == 8 ? endian_fix64(x) : endian_fix32(x);
+}
 static ALWAYS_INLINE uint16_t endian_fix16( uint16_t x )
 {
     return (x<<8)|(x>>8);
@@ -262,6 +259,14 @@ static int ALWAYS_INLINE x264_clz( uint32_t x )
 #else
 #define x264_lower_thread_priority(p)
 #endif
+
+static inline uint8_t x264_is_regular_file( FILE *filehandle )
+{
+    struct stat file_stat;
+    if( fstat( fileno( filehandle ), &file_stat ) )
+        return 0;
+    return S_ISREG( file_stat.st_mode );
+}
 
 #endif /* X264_OSDEP_H */
 

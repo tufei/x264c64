@@ -13,13 +13,18 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
        encoder/cavlc.c encoder/encoder.c encoder/lookahead.c
 
 SRCCLI = x264.c input/yuv.c input/y4m.c output/raw.c \
-         output/matroska.c output/matroska_ebml.c
+         output/matroska.c output/matroska_ebml.c \
+         output/flv.c output/flv_bytestream.c
 
 MUXERS := $(shell grep -E "(IN|OUT)PUT" config.h)
 
 # Optional muxer module sources
-ifneq ($(findstring AVIS_INPUT, $(MUXERS)),)
-SRCCLI += input/avis.c
+ifneq ($(findstring VFW_INPUT, $(MUXERS)),)
+SRCCLI += input/vfw.c
+endif
+
+ifneq ($(findstring AVS_INPUT, $(MUXERS)),)
+SRCCLI += input/avs.c
 endif
 
 ifneq ($(findstring HAVE_PTHREAD, $(CFLAGS)),)
@@ -64,11 +69,9 @@ endif
 
 # AltiVec optims
 ifeq ($(ARCH),PPC)
-ALTIVECSRC += common/ppc/mc.c common/ppc/pixel.c common/ppc/dct.c \
-              common/ppc/quant.c common/ppc/deblock.c \
-              common/ppc/predict.c
-SRCS += $(ALTIVECSRC)
-$(ALTIVECSRC:%.c=%.o): CFLAGS += $(ALTIVECFLAGS)
+SRCS += common/ppc/mc.c common/ppc/pixel.c common/ppc/dct.c \
+        common/ppc/quant.c common/ppc/deblock.c \
+        common/ppc/predict.c
 endif
 
 # NEON optims
@@ -119,6 +122,7 @@ checkasm: tools/checkasm.o libx264.a
 
 %.o: %.S
 	$(AS) $(ASFLAGS) -o $@ $<
+	-@ $(STRIP) -x $@ # delete local/anonymous symbols, so they don't show up in oprofile
 
 .depend: config.mak
 	rm -f .depend

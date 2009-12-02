@@ -42,19 +42,21 @@ typedef struct
 {
     int pict_type;
     int kept_as_ref;
-    float qscale;
+    double qscale;
     int mv_bits;
     int tex_bits;
     int misc_bits;
     uint64_t expected_bits; /*total expected bits up to the current frame (current one excluded)*/
     double expected_vbv;
-    float new_qscale;
+    double new_qscale;
     int new_qp;
     int i_count;
     int p_count;
     int s_count;
     float blurred_complexity;
     char direct_mode;
+    int16_t weight[2];
+    int16_t i_weight_denom;
     int refcount[16];
     int refs;
 } ratecontrol_entry_t;
@@ -182,6 +184,22 @@ static inline double qscale2bits(ratecontrol_entry_t *rce, double qscale)
            + rce->misc_bits;
 }
 
+static ALWAYS_INLINE uint32_t ac_energy_plane( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame, int i )
+{
+    int w = i ? 8 : 16;
+    int shift = i ? 6 : 8;
+    int stride = frame->i_stride[i];
+    int offset = h->mb.b_interlaced
+        ? w * (mb_x + (mb_y&~1) * stride) + (mb_y&1) * stride
+        : w * (mb_x + mb_y * stride);
+    int pix = i ? PIXEL_8x8 : PIXEL_16x16;
+    stride <<= h->mb.b_interlaced;
+    uint64_t res = h->pixf.var[pix]( frame->plane[i] + offset, stride );
+    uint32_t sum = (uint32_t)res;
+    uint32_t sqr = res >> 32;
+    return sqr - (sum * sum >> shift);
+}
+
 // Find the total AC energy of the block in all planes.
 static NOINLINE uint32_t ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame )
 {
@@ -189,18 +207,9 @@ static NOINLINE uint32_t ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame
      * and putting it after floating point ops.  As a result, we put the emms at the end of the
      * function and make sure that its always called before the float math.  Noinline makes
      * sure no reordering goes on. */
-    uint32_t var = 0, i;
-    for( i = 0; i < 3; i++ )
-    {
-        int w = i ? 8 : 16;
-        int stride = frame->i_stride[i];
-        int offset = h->mb.b_interlaced
-            ? w * (mb_x + (mb_y&~1) * stride) + (mb_y&1) * stride
-            : w * (mb_x + mb_y * stride);
-        int pix = i ? PIXEL_8x8 : PIXEL_16x16;
-        stride <<= h->mb.b_interlaced;
-        var += h->pixf.var[pix]( frame->plane[i]+offset, stride );
-    }
+    uint32_t var = ac_energy_plane( h, mb_x, mb_y, frame, 0 );
+    var         += ac_energy_plane( h, mb_x, mb_y, frame, 1 );
+    var         += ac_energy_plane( h, mb_x, mb_y, frame, 2 );
     x264_emms();
     return var;
 }
@@ -318,12 +327,17 @@ int x264_reference_build_list_optimal( x264_t *h )
 {
     ratecontrol_entry_t *rce = h->rc->rce;
     x264_frame_t *frames[16];
+    x264_weight_t weights[16][3];
+    int refcount[16];
     int ref, i;
 
     if( rce->refs != h->i_ref0 )
         return -1;
 
     memcpy( frames, h->fref0, sizeof(frames) );
+    memcpy( refcount, rce->refcount, sizeof(refcount) );
+    memcpy( weights, h->fenc->weight, sizeof(weights) );
+    memset( &h->fenc->weight[1][0], 0, sizeof(x264_weight_t[15][3]) );
 
     /* For now don't reorder ref 0; it seems to lower quality
        in most cases due to skips. */
@@ -331,11 +345,18 @@ int x264_reference_build_list_optimal( x264_t *h )
     {
         int max = -1;
         int bestref = 1;
+
         for( i = 1; i < h->i_ref0; i++ )
-            /* Favor lower POC as a tiebreaker. */
-            COPY2_IF_GT( max, rce->refcount[i], bestref, i );
-        rce->refcount[bestref] = -1;
+            if( !frames[i]->b_duplicate || frames[i]->i_frame != h->fref0[ref-1]->i_frame )
+                /* Favor lower POC as a tiebreaker. */
+                COPY2_IF_GT( max, refcount[i], bestref, i );
+
+        /* FIXME: If there are duplicates from frames other than ref0 then it is possible
+         * that the optimal ordering doesnt place every duplicate. */
+
+        refcount[bestref] = -1;
         h->fref0[ref] = frames[bestref];
+        memcpy( h->fenc->weight[ref], weights[bestref], sizeof(weights[bestref]) );
     }
 
     return 0;
@@ -533,19 +554,37 @@ int x264_ratecontrol_new( x264_t *h )
         /* check whether 1st pass options were compatible with current options */
         if( !strncmp( stats_buf, "#options:", 9 ) )
         {
-            int i;
+            int i, j;
             char *opts = stats_buf;
             stats_in = strchr( stats_buf, '\n' );
             if( !stats_in )
                 return -1;
             *stats_in = '\0';
             stats_in++;
+            if( sscanf( opts, "#options: %dx%d", &i, &j ) != 2 )
+            {
+                x264_log( h, X264_LOG_ERROR, "resolution specified in stats file not valid\n" );
+                return -1;
+            }
+            else if( h->param.rc.b_mb_tree && (i != h->param.i_width || j != h->param.i_height)  )
+            {
+                x264_log( h, X264_LOG_ERROR, "MB-tree doesn't support different resolution than 1st pass (%dx%d vs %dx%d)\n",
+                          h->param.i_width, h->param.i_height, i, j );
+                return -1;
+            }
 
             if( ( p = strstr( opts, "bframes=" ) ) && sscanf( p, "bframes=%d", &i )
                 && h->param.i_bframe != i )
             {
                 x264_log( h, X264_LOG_ERROR, "different number of B-frames than 1st pass (%d vs %d)\n",
                           h->param.i_bframe, i );
+                return -1;
+            }
+
+            if( ( p = strstr( opts, "wpredp=" ) ) && sscanf( p, "wpredp=%d", &i ) &&
+                X264_MAX( 0, h->param.analyse.i_weighted_pred ) != i )
+            {
+                x264_log( h, X264_LOG_ERROR, "different weightp option than 1st pass (had weightp=%d)\n", i );
                 return -1;
             }
 
@@ -666,6 +705,13 @@ int x264_ratecontrol_new( x264_t *h )
                     goto parse_error;
             }
             rce->refs = ref;
+
+            /* find weights */
+            rce->i_weight_denom = -1;
+            char *w = strchr( p, 'w' );
+            if( w )
+                if( sscanf( w, "w:%hd,%hd,%hd", &rce->i_weight_denom, &rce->weight[0], &rce->weight[1] ) != 3 )
+                    rce->i_weight_denom = -1;
 
             switch(pict_type)
             {
@@ -888,11 +934,13 @@ void x264_ratecontrol_delete( x264_t *h )
 {
     x264_ratecontrol_t *rc = h->rc;
     int i;
+    int b_regular_file;
 
     if( rc->p_stat_file_out )
     {
+        b_regular_file = x264_is_regular_file( rc->p_stat_file_out );
         fclose( rc->p_stat_file_out );
-        if( h->i_frame >= rc->num_entries )
+        if( h->i_frame >= rc->num_entries && b_regular_file )
             if( rename( rc->psz_stat_file_tmpname, h->param.rc.psz_stat_out ) != 0 )
             {
                 x264_log( h, X264_LOG_ERROR, "failed to rename \"%s\" to \"%s\"\n",
@@ -902,8 +950,9 @@ void x264_ratecontrol_delete( x264_t *h )
     }
     if( rc->p_mbtree_stat_file_out )
     {
+        b_regular_file = x264_is_regular_file( rc->p_mbtree_stat_file_out );
         fclose( rc->p_mbtree_stat_file_out );
-        if( h->i_frame >= rc->num_entries )
+        if( h->i_frame >= rc->num_entries && b_regular_file )
             if( rename( rc->psz_mbtree_stat_file_tmpname, rc->psz_mbtree_stat_file_name ) != 0 )
             {
                 x264_log( h, X264_LOG_ERROR, "failed to rename \"%s\" to \"%s\"\n",
@@ -1245,6 +1294,15 @@ int x264_ratecontrol_slice_type( x264_t *h, int frame_num )
     }
 }
 
+void x264_ratecontrol_set_weights( x264_t *h, x264_frame_t *frm )
+{
+    ratecontrol_entry_t *rce = &h->rc->entry[frm->i_frame];
+    if( h->param.analyse.i_weighted_pred <= 0 )
+        return;
+    if( rce->i_weight_denom >= 0 )
+        SET_WEIGHT( frm->weight[0][0], 1, rce->weight[0], rce->i_weight_denom, rce->weight[1] );
+}
+
 /* After encoding one frame, save stats and update ratecontrol state */
 int x264_ratecontrol_end( x264_t *h, int bits )
 {
@@ -1287,16 +1345,25 @@ int x264_ratecontrol_end( x264_t *h, int bits )
                  c_direct) < 0 )
             goto fail;
 
-        for( i = 0; i < h->i_ref0; i++ )
+        /* Only write information for reference reordering once. */
+        int use_old_stats = h->param.rc.b_stat_read && rc->rce->refs > 1;
+        for( i = 0; i < (use_old_stats ? rc->rce->refs : h->i_ref0); i++ )
         {
-            int refcount = h->param.b_interlaced ? h->stat.frame.i_mb_count_ref[0][i*2]
-                                                 + h->stat.frame.i_mb_count_ref[0][i*2+1] :
-                                                   h->stat.frame.i_mb_count_ref[0][i];
+            int refcount = use_old_stats         ? rc->rce->refcount[i]
+                         : h->param.b_interlaced ? h->stat.frame.i_mb_count_ref[0][i*2]
+                                                 + h->stat.frame.i_mb_count_ref[0][i*2+1]
+                         :                         h->stat.frame.i_mb_count_ref[0][i];
             if( fprintf( rc->p_stat_file_out, "%d ", refcount ) < 0 )
                 goto fail;
         }
 
-        if( fprintf( rc->p_stat_file_out, ";\n" ) < 0 )
+        if( h->sh.weight[0][0].weightfn )
+        {
+            if( fprintf( rc->p_stat_file_out, "w:%"PRId32",%"PRId32",%"PRId32, h->sh.weight[0][0].i_denom, h->sh.weight[0][0].i_scale, h->sh.weight[0][0].i_offset ) < 0 )
+                goto fail;
+        }
+
+        if( fprintf( rc->p_stat_file_out, ";\n") < 0 )
             goto fail;
 
         /* Don't re-write the data in multi-pass mode. */

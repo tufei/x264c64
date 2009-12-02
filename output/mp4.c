@@ -126,6 +126,15 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
     mp4_hnd_t *p_mp4;
 
     *p_handle = NULL;
+    FILE *fh = fopen( psz_filename, "w" );
+    if( !fh )
+        return -1;
+    else if( !x264_is_regular_file( fh ) )
+    {
+        fprintf( stderr, "mp4 [error]: MP4 output is incompatible with non-regular file `%s'\n", psz_filename );
+        return -1;
+    }
+    fclose( fh );
 
     if( !(p_mp4 = malloc( sizeof(mp4_hnd_t) )) )
         return -1;
@@ -188,7 +197,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     return 0;
 }
 
-static int write_nalu( hnd_t handle, uint8_t *p_nalu, int i_size )
+static int write_nalu( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_t *p_picture )
 {
     mp4_hnd_t *p_mp4 = handle;
     GF_AVCConfigSlot *p_slot;

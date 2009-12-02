@@ -25,7 +25,9 @@
 
 static int open_file( char *psz_filename, hnd_t *p_handle )
 {
-    if( !(*p_handle = fopen( psz_filename, "w+b" )) )
+    if( !strcmp( psz_filename, "-" ) )
+        *p_handle = stdout;
+    else if( !(*p_handle = fopen( psz_filename, "w+b" )) )
         return -1;
 
     return 0;
@@ -36,7 +38,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     return 0;
 }
 
-static int write_nalu( hnd_t handle, uint8_t *p_nalu, int i_size )
+static int write_nalu( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_t *p_picture )
 {
     if( fwrite( p_nalu, i_size, 1, (FILE*)handle ) > 0 )
         return i_size;

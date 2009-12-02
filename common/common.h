@@ -60,6 +60,13 @@ do {\
 // 16 for the macroblock in progress + 3 for deblocking + 3 for motion compensation filter + 2 for extra safety
 #define X264_THREAD_HEIGHT 24
 
+/* WEIGHTP_FAKE is set when mb_tree & psy are enabled, but normal weightp is disabled
+ * (such as in baseline). It checks for fades in lookahead and adjusts qp accordingly
+ * to increase quality. Defined as (-1) so that if(i_weighted_pred > 0) is true only when
+ * real weights are being used. */
+
+#define X264_WEIGHTP_FAKE (-1)
+
 #ifdef _TMS320C6400
 #define TI_PRAGMA_MACRO_SUPPORT 6000001
 #if (__TI_COMPILER_VERSION__ >= TI_PRAGMA_MACRO_SUPPORT)
@@ -73,6 +80,7 @@ do {\
 /****************************************************************************
  * Includes
  ****************************************************************************/
+#include <sys/stat.h>
 #include "osdep.h"
 #include <stdarg.h>
 #include <stddef.h>
@@ -80,6 +88,21 @@ do {\
 #include <string.h>
 #include <assert.h>
 #include <limits.h>
+
+/* Unions for type-punning.
+ * Mn: load or store n bits, aligned, native-endian
+ * CPn: copy n bits, aligned, native-endian
+ * we don't use memcpy for CPn because memcpy's args aren't assumed to be aligned */
+typedef union { uint16_t i; uint8_t  c[2]; } MAY_ALIAS x264_union16_t;
+typedef union { uint32_t i; uint16_t b[2]; uint8_t  c[4]; } MAY_ALIAS x264_union32_t;
+typedef union { uint64_t i; uint32_t a[2]; uint16_t b[4]; uint8_t c[8]; } MAY_ALIAS x264_union64_t;
+#define M16(src) (((x264_union16_t*)(src))->i)
+#define M32(src) (((x264_union32_t*)(src))->i)
+#define M64(src) (((x264_union64_t*)(src))->i)
+#define CP16(dst,src) M16(dst) = M16(src)
+#define CP32(dst,src) M32(dst) = M32(src)
+#define CP64(dst,src) M64(dst) = M64(src)
+
 #include "x264.h"
 #include "bs.h"
 #include "set.h"
@@ -90,6 +113,7 @@ do {\
 #include "dct.h"
 #include "cabac.h"
 #include "quant.h"
+#include "config.h"
 
 #ifndef strdup
 char *strdup(const char *s);
@@ -261,6 +285,9 @@ typedef struct
         int arg;
     } ref_pic_list_order[2][16];
 
+    /* P-frame weighting */
+    x264_weight_t weight[16][3];
+
     int i_mmco_remove_from_end;
     int i_mmco_command_count;
     struct /* struct for future expansion */
@@ -418,6 +445,9 @@ struct x264_t
         /* Unused frames: 0 = fenc, 1 = fdec */
         x264_frame_t **unused[2];
 
+        /* Unused blank frames (for duplicates) */
+        x264_frame_t **blank_unused;
+
         /* frames used for reference + sentinels */
         x264_frame_t *reference[16+2];
 
@@ -530,6 +560,9 @@ struct x264_t
         uint8_t *intra_border_backup[2][3]; /* bottom pixels of the previous mb row, used for intra prediction after the framebuffer has been deblocked */
         uint8_t (*nnz_backup)[16];          /* when using cavlc + 8x8dct, the deblocker uses a modified nnz */
 
+         /* buffer for weighted versions of the reference frames */
+        uint8_t *p_weight_buf[16];
+
         /* current value */
         int     i_type;
         int     i_partition;
@@ -592,6 +625,7 @@ struct x264_t
             /* pointer over mb of the references */
             int i_fref[2];
             uint8_t *p_fref[2][32][4+2]; /* last: lN, lH, lV, lHV, cU, cV */
+            uint8_t *p_fref_w[32];  /* weighted fullpel luma */
             uint16_t *p_integral[2][16];
 
             /* fref stride */
@@ -647,7 +681,8 @@ struct x264_t
 
         /* B_direct and weighted prediction */
         int16_t dist_scale_factor[16][2];
-        int16_t bipred_weight[32][4];
+        int8_t bipred_weight_buf[2][32][4];
+        int8_t (*bipred_weight)[4];
         /* maps fref1[0]'s ref indices into the current list0 */
 #define map_col_to_list0(col) h->mb.map_col_to_list0[col+2]
         int8_t  map_col_to_list0[18];
@@ -709,6 +744,8 @@ struct x264_t
         /* */
         int     i_direct_score[2];
         int     i_direct_frames[2];
+        /* num p-frames weighted */
+        int     i_wpred[3];
 
     } stat;
 

@@ -184,7 +184,7 @@ static int ALWAYS_INLINE x264_decimate_score_internal( int16_t *dct, int i_max )
 #ifdef _TMS320C6400
     while( idx >= 0 && _mem4(&dct[idx-1]) == 0 ) /* on safe side YFY --01/01/2009 */
 #else
-    while( idx >= 0 && *(uint32_t*)&dct[idx-1] == 0 )
+    while( idx >= 0 && M32( &dct[idx-1] ) == 0 )
 #endif
         idx -= 2;
     if( idx >= 0 && dct[idx] == 0 )
@@ -228,7 +228,7 @@ static int ALWAYS_INLINE x264_coeff_last_internal( int16_t *l, int i_count )
 #ifdef _TMS320C6400
         if( _mem8(l + i_last - 3) )
 #else
-        if( *(uint64_t*)(l+i_last-3) )
+        if( M64( l+i_last-3 ) )
 #endif
             break;
     while( i_last >= 0 && l[i_last] == 0 )

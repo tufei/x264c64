@@ -7,7 +7,7 @@ echo ""
 echo "available options:"
 echo ""
 echo "  --help                   print this message"
-echo "  --disable-avis-input     disables avisynth input (win32 only)"
+echo "  --disable-avs-input      disables avisynth input (win32 only)"
 echo "  --disable-mp4-output     disables mp4 output (using gpac)"
 echo "  --disable-pthread        disables multithreaded encoding"
 echo "  --disable-asm            disables assembly optimizations on x86 and arm"
@@ -51,7 +51,7 @@ libdir='${exec_prefix}/lib'
 includedir='${prefix}/include'
 DEVNULL='/dev/null'
 
-avis_input="auto"
+avs_input="auto"
 mp4_output="auto"
 pthread="auto"
 asm="yes"
@@ -95,11 +95,16 @@ for opt do
         --disable-asm)
             asm="no"
             ;;
-        --enable-avis-input)
-            avis_input="yes"
+        --enable-avs-input=*)
+            avs_input="$optarg"
+            if [ "$avs_input" != "auto" -a "$avs_input" != "vfw" -a "$avs_input" != "avs" ] ; then
+                echo "unrecognized enable-avis-input option '$avs_input'"
+                echo "available options are 'auto', 'avs', or 'vfw'"
+                avs_input="auto"
+            fi
             ;;
-        --disable-avis-input)
-            avis_input="no"
+        --disable-avs-input)
+            avs_input="no"
             ;;
         --enable-mp4-output)
             mp4_output="yes"
@@ -180,7 +185,7 @@ case $host_os in
     CFLAGS="$CFLAGS -falign-loops=16"
     LDFLAGS="$LDFLAGS -lm"
     if [ "$pic" = "no" ]; then
-        CFLAGS="$CFLAGS -mdynamic-no-pic"
+        cc_check "" -mdynamic-no-pic && CFLAGS="$CFLAGS -mdynamic-no-pic"
     fi
     ;;
   freebsd*)
@@ -255,8 +260,10 @@ case $host_cpu in
     AS="yasm"
     if [ "$SYS" = MACOSX ];then
       ASFLAGS="$ASFLAGS -f macho64 -m amd64 -DPIC -DPREFIX"
-      CFLAGS="$CFLAGS -arch x86_64"
-      LDFLAGS="$LDFLAGS -arch x86_64"
+      if cc_check '' "-arch x86_64"; then
+        CFLAGS="$CFLAGS -arch x86_64"
+        LDFLAGS="$LDFLAGS -arch x86_64"
+      fi
     elif [ "$SYS" = MINGW ]; then
       ASFLAGS="$ASFLAGS -f win32 -m amd64 -DPREFIX"
     else
@@ -267,9 +274,9 @@ case $host_cpu in
     ARCH="PPC"
     if [ $SYS = MACOSX ]
     then
-      ALTIVECFLAGS="$ALTIVECFLAGS -faltivec -fastf -mcpu=G4"
+      CFLAGS="$CFLAGS -faltivec -fastf -mcpu=G4"
     else
-      ALTIVECFLAGS="$ALTIVECFLAGS -maltivec -mabi=altivec -DHAVE_ALTIVEC_H"
+      CFLAGS="$CFLAGS -maltivec -mabi=altivec -DHAVE_ALTIVEC_H"
     fi
     ;;
   sparc)
@@ -348,9 +355,13 @@ fi
 
 CFLAGS="$CFLAGS -DARCH_$ARCH -DSYS_$SYS"
 
-echo "unsigned int endian = 'B' << 24 | 'I' << 16 | 'G' << 8 | 'E';" > conftest.c
+echo "int i = 0x42494745; double f = 0x1.0656e6469616ep+102;" > conftest.c
 $CC $CFLAGS conftest.c -c -o conftest.o 2>$DEVNULL || die "endian test failed"
-grep -q BIGE conftest.o && CFLAGS="$CFLAGS -DWORDS_BIGENDIAN"
+if grep -q BIGE conftest.o && grep -q FPendian conftest.o ; then
+    CFLAGS="$CFLAGS -DWORDS_BIGENDIAN"
+elif !(grep -q EGIB conftest.o && grep -q naidnePF conftest.o) ; then
+    die "endian test failed"
+fi
 
 # autodetect options that weren't forced nor disabled
 
@@ -404,22 +415,29 @@ if [ "$mp4_output" = "yes" ] ; then
     LDFLAGS="$LDFLAGS $MP4_LDFLAGS"
 fi
 
-if [ "$avis_input" = "auto" ] ; then
-    if [ $SYS = MINGW ]; then
-        avis_input="yes"
+if [ "$avs_input" = "auto" -o "$avs_input" = "avs" ] ; then
+    if [ $SYS = MINGW ] && cc_check avisynth_c.h ; then
+        avs_input="avs"
+        echo "#define AVS_INPUT" >> config.h
+        echo "#define HAVE_AVISYNTH_C_H" >> config.h
+    elif [ $SYS = MINGW ] && cc_check extras/avisynth_c.h ; then
+        avs_input="avs"
+        echo "#define AVS_INPUT" >> config.h
     else
-        avis_input="no";
+        avs_input="auto"
     fi
 fi
-if [ "$avis_input" = "yes" ] ; then
-    if cc_check "stdlib.h" -lvfw32 ; then
-        echo "#define AVIS_INPUT" >> config.h
+if [ "$avs_input" = "auto" -o "$avs_input" = "vfw" ] ; then
+    if [ $SYS = MINGW ] && cc_check "stdlib.h" -lvfw32 ; then
+        echo "#define VFW_INPUT" >> config.h
         LDFLAGS="$LDFLAGS -lvfw32"
-    elif cc_check "stdlib.h" -lavifil32 ; then
-        echo "#define AVIS_INPUT" >> config.h
+        avs_input="vfw"
+    elif [ $SYS = MINGW ] && cc_check "stdlib.h" -lavifil32 ; then
+        echo "#define VFW_INPUT" >> config.h
         LDFLAGS="$LDFLAGS -lavifil32"
+        avs_input="vfw"
     else
-        avis_input="no";
+        avs_input="no";
     fi
 fi
 
@@ -467,7 +485,6 @@ ARCH=$ARCH
 SYS=$SYS
 CC=$CC
 CFLAGS=$CFLAGS
-ALTIVECFLAGS=$ALTIVECFLAGS
 LDFLAGS=$LDFLAGS
 AR=$AR
 RANLIB=$RANLIB
@@ -523,7 +540,7 @@ EOF
 echo "Platform:   $ARCH"
 echo "System:     $SYS"
 echo "asm:        $asm"
-echo "avis input: $avis_input"
+echo "avs input:  $avs_input"
 echo "mp4 output: $mp4_output"
 echo "pthread:    $pthread"
 echo "debug:      $debug"
