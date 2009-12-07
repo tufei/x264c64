@@ -48,9 +48,6 @@
 #define SetConsoleTitle(t)
 #endif
 
-uint8_t *mux_buffer = NULL;
-int mux_buffer_size = 0;
-
 #ifndef _TMS320C6400
 /* Ctrl-C handler */
 static int     b_ctrl_c = 0;
@@ -1431,7 +1428,6 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     if( opt->b_progress )
         fprintf( stderr, "                                                                               \r" );
     x264_encoder_close( h );
-    x264_free( mux_buffer );
     fprintf( stderr, "\n" );
 
 #ifndef _TMS320C6400
