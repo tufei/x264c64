@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 79
+#define X264_BUILD 80
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -165,6 +165,7 @@ typedef struct x264_param_t
     /* CPU flags */
     unsigned int cpu;
     int         i_threads;       /* encode multiple frames in parallel */
+    int         b_sliced_threads;  /* Whether to use slice-based threading. */
     int         b_deterministic; /* whether to allow non-deterministic optimizations when threaded */
     int         i_sync_lookahead; /* threaded lookahead buffer */
 
@@ -203,7 +204,7 @@ typedef struct x264_param_t
     int         i_bframe;   /* how many b-frame between 2 references pictures */
     int         i_bframe_adaptive;
     int         i_bframe_bias;
-    int         i_bframe_pyramid;   /* Keep some B-frames as references: 0=off, 1=strict heirarchical, 2=normal */
+    int         i_bframe_pyramid;   /* Keep some B-frames as references: 0=off, 1=strict hierarchical, 2=normal */
 
     int         b_deblocking_filter;
     int         i_deblocking_filter_alphac0;    /* [-6, 6] -6 light filter, 6 strong */

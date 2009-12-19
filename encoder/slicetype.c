@@ -45,7 +45,7 @@ static void x264_lowres_context_init( x264_t *h, x264_mb_analysis_t *a )
     else
     {
         h->mb.i_me_method = X264_ME_DIA;
-        h->mb.i_subpel_refine = 3;
+        h->mb.i_subpel_refine = 2;
     }
     h->mb.b_chroma_me = 0;
 }
@@ -306,14 +306,25 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     }
 #define TRY_BIDIR( mv0, mv1, penalty ) \
     { \
-        int stride1 = 16, stride2 = 16; \
-        uint8_t *src1, *src2; \
         int i_cost; \
-        src1 = h->mc.get_ref( pix1, &stride1, m[0].p_fref, m[0].i_stride[0], \
-                              (mv0)[0], (mv0)[1], 8, 8, w ); \
-        src2 = h->mc.get_ref( pix2, &stride2, m[1].p_fref, m[1].i_stride[0], \
-                              (mv1)[0], (mv1)[1], 8, 8, w ); \
-        h->mc.avg[PIXEL_8x8]( pix1, 16, src1, stride1, src2, stride2, i_bipred_weight ); \
+        if( h->param.analyse.i_subpel_refine <= 1 ) \
+        { \
+            int hpel_idx1 = (((mv0)[0]&2)>>1) + ((mv0)[1]&2); \
+            int hpel_idx2 = (((mv1)[0]&2)>>1) + ((mv1)[1]&2); \
+            uint8_t *src1 = m[0].p_fref[hpel_idx1] + ((mv0)[0]>>2) + ((mv0)[1]>>2) * m[0].i_stride[0]; \
+            uint8_t *src2 = m[1].p_fref[hpel_idx2] + ((mv1)[0]>>2) + ((mv1)[1]>>2) * m[1].i_stride[0]; \
+            h->mc.avg[PIXEL_8x8]( pix1, 16, src1, m[0].i_stride[0], src2, m[1].i_stride[0], i_bipred_weight ); \
+        } \
+        else \
+        { \
+            int stride1 = 16, stride2 = 16; \
+            uint8_t *src1, *src2; \
+            src1 = h->mc.get_ref( pix1, &stride1, m[0].p_fref, m[0].i_stride[0], \
+                                  (mv0)[0], (mv0)[1], 8, 8, w ); \
+            src2 = h->mc.get_ref( pix2, &stride2, m[1].p_fref, m[1].i_stride[0], \
+                                  (mv1)[0], (mv1)[1], 8, 8, w ); \
+            h->mc.avg[PIXEL_8x8]( pix1, 16, src1, stride1, src2, stride2, i_bipred_weight ); \
+        } \
         i_cost = penalty + h->pixf.mbcmp[PIXEL_8x8]( \
                            m[0].p_fenc[0], FENC_STRIDE, pix1, 16 ); \
         COPY2_IF_LT( i_bcost, i_cost, list_used, 3 ); \
@@ -324,6 +335,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     m[0].i_stride[0] = i_stride;
     m[0].p_fenc[0] = h->mb.pic.p_fenc[0];
     m[0].weight = w;
+    m[0].i_ref = 0;
     LOAD_HPELS_LUMA( m[0].p_fref, fref0->lowres );
     m[0].p_fref_w = m[0].p_fref[0];
     if( w[0].weightfn )
@@ -332,10 +344,13 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     if( b_bidir )
     {
         int16_t *mvr = fref1->lowres_mvs[0][p1-p0-1][i_mb_xy];
-        int dmv[2][2];
+        ALIGNED_8( int16_t dmv[2][2] );
 
-        h->mc.memcpy_aligned( &m[1], &m[0], sizeof(x264_me_t) );
-        m[1].i_ref = p1;
+        m[1].i_pixel = PIXEL_8x8;
+        m[1].p_cost_mv = a->p_cost_mv;
+        m[1].i_stride[0] = i_stride;
+        m[1].p_fenc[0] = h->mb.pic.p_fenc[0];
+        m[1].i_ref = 0;
         m[1].weight = weight_none;
         LOAD_HPELS_LUMA( m[1].p_fref, fref1->lowres );
         m[1].p_fref_w = m[1].p_fref[0];
@@ -346,9 +361,11 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
         dmv[1][1] = dmv[0][1] - mvr[1];
         CLIP_MV( dmv[0] );
         CLIP_MV( dmv[1] );
+        if( h->param.analyse.i_subpel_refine <= 1 )
+            M64( dmv ) &= ~0x0001000100010001ULL; /* mv & ~1 */
 
         TRY_BIDIR( dmv[0], dmv[1], 0 );
-        if( dmv[0][0] | dmv[0][1] | dmv[1][0] | dmv[1][1] )
+        if( M64( dmv ) )
         {
             int i_cost;
             h->mc.avg[PIXEL_8x8]( pix1, 16, m[0].p_fref[0], m[0].i_stride[0], m[1].p_fref[0], m[1].i_stride[0], i_bipred_weight );
@@ -651,7 +668,7 @@ static void x264_macroblock_tree_finish( x264_t *h, x264_frame_t *frame, int ref
     }
 }
 
-static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, int p0, int p1, int b )
+static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, int p0, int p1, int b, int referenced )
 {
 #ifndef _TMS320C6400
     x264_frame_t *refs[2] = {frames[p0],frames[p1]};
@@ -661,6 +678,7 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     int16_t (*mvs[2])[2] = { frames[b]->lowres_mvs[0][b-p0-1], frames[b]->lowres_mvs[1][p1-b-1] };
     int bipred_weights[2] = {i_bipred_weight, 64 - i_bipred_weight};
     int *buf = h->scratch_buffer;
+    uint16_t *propagate_cost = frames[b]->i_propagate_cost;
 #else
     x264_frame_t *refs[2];
     uint16_t *ref_costs[2];
@@ -669,6 +687,7 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     int *buf = h->scratch_buffer;
     int16_t (*mvs[2])[2];
     int bipred_weights[2];
+    uint16_t *propagate_cost = frames[b]->i_propagate_cost;
 
     refs[0] = frames[p0];
     refs[1] = frames[p1];
@@ -680,12 +699,18 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     bipred_weights[1] = 64 - i_bipred_weight;
 #endif
 
+    /* For non-reffed frames the source costs are always zero, so just memset one row and re-use it. */
+    if( !referenced )
+        memset( frames[b]->i_propagate_cost, 0, h->sps->i_mb_width * sizeof(uint16_t) );
+
     for( h->mb.i_mb_y = 0; h->mb.i_mb_y < h->sps->i_mb_height; h->mb.i_mb_y++ )
     {
         int mb_index = h->mb.i_mb_y*h->mb.i_mb_stride;
-        h->mc.mbtree_propagate_cost( buf, frames[b]->i_propagate_cost+mb_index,
+        h->mc.mbtree_propagate_cost( buf, propagate_cost,
             frames[b]->i_intra_cost+mb_index, frames[b]->lowres_costs[b-p0][p1-b]+mb_index,
             frames[b]->i_inv_qscale_factor+mb_index, h->sps->i_mb_width );
+        if( referenced )
+            propagate_cost += h->sps->i_mb_width;
         for( h->mb.i_mb_x = 0; h->mb.i_mb_x < h->sps->i_mb_width; h->mb.i_mb_x++, mb_index++ )
         {
             int propagate_amount = buf[h->mb.i_mb_x];
@@ -759,14 +784,15 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
         }
     }
 
-    if( h->param.rc.i_vbv_buffer_size && b == p1 )
-        x264_macroblock_tree_finish( h, frames[b], b-p0 );
+    if( h->param.rc.i_vbv_buffer_size && referenced )
+        x264_macroblock_tree_finish( h, frames[b], b == p1 ? b - p0 : 0 );
 }
 
 static void x264_macroblock_tree( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, int num_frames, int b_intra )
 {
     int i, idx = !b_intra;
     int last_nonb, cur_nonb = 1;
+    int bframes = 0;
     if( b_intra )
         x264_slicetype_frame_cost( h, a, frames, 0, 0, 0, 0 );
 
@@ -788,18 +814,41 @@ static void x264_macroblock_tree( x264_t *h, x264_mb_analysis_t *a, x264_frame_t
             break;
         x264_slicetype_frame_cost( h, a, frames, cur_nonb, last_nonb, last_nonb, 0 );
         memset( frames[cur_nonb]->i_propagate_cost, 0, h->mb.i_mb_count * sizeof(uint16_t) );
-        while( i > cur_nonb )
+        bframes = last_nonb - cur_nonb - 1;
+        if( h->param.i_bframe_pyramid && bframes > 1 )
         {
-            x264_slicetype_frame_cost( h, a, frames, cur_nonb, last_nonb, i, 0 );
-            memset( frames[i]->i_propagate_cost, 0, h->mb.i_mb_count * sizeof(uint16_t) );
-            x264_macroblock_tree_propagate( h, frames, cur_nonb, last_nonb, i );
-            i--;
+            int middle = (bframes + 1)/2 + cur_nonb;
+            x264_slicetype_frame_cost( h, a, frames, cur_nonb, last_nonb, middle, 0 );
+            memset( frames[middle]->i_propagate_cost, 0, h->mb.i_mb_count * sizeof(uint16_t) );
+            while( i > cur_nonb )
+            {
+                int p0 = i > middle ? middle : cur_nonb;
+                int p1 = i < middle ? middle : last_nonb;
+                if( i != middle )
+                {
+                    x264_slicetype_frame_cost( h, a, frames, p0, p1, i, 0 );
+                    x264_macroblock_tree_propagate( h, frames, p0, p1, i, 0 );
+                }
+                i--;
+            }
+            x264_macroblock_tree_propagate( h, frames, cur_nonb, last_nonb, middle, 1 );
         }
-        x264_macroblock_tree_propagate( h, frames, cur_nonb, last_nonb, last_nonb );
+        else
+        {
+            while( i > cur_nonb )
+            {
+                x264_slicetype_frame_cost( h, a, frames, cur_nonb, last_nonb, i, 0 );
+                x264_macroblock_tree_propagate( h, frames, cur_nonb, last_nonb, i, 0 );
+                i--;
+            }
+        }
+        x264_macroblock_tree_propagate( h, frames, cur_nonb, last_nonb, last_nonb, 1 );
         last_nonb = cur_nonb;
     }
 
     x264_macroblock_tree_finish( h, frames[last_nonb], last_nonb );
+    if( h->param.i_bframe_pyramid && bframes > 1 && !h->param.rc.i_vbv_buffer_size )
+        x264_macroblock_tree_finish( h, frames[last_nonb+(bframes+1)/2], 0 );
 }
 
 static int x264_vbv_frame_cost( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **frames, int p0, int p1, int b )
@@ -869,8 +918,18 @@ static int x264_slicetype_path_cost( x264_t *h, x264_mb_analysis_t *a, x264_fram
         if( cost > threshold )
             break;
 
-        for( next_b = loc; next_b < next_p && cost < threshold; next_b++ )
-            cost += x264_slicetype_frame_cost( h, a, frames, cur_p, next_p, next_b, 0 );
+        if( h->param.i_bframe_pyramid && next_p - cur_p > 2 )
+        {
+            int middle = cur_p + (next_p - cur_p)/2;
+            cost += x264_slicetype_frame_cost( h, a, frames, cur_p, next_p, middle, 0 );
+            for( next_b = loc; next_b < middle && cost < threshold; next_b++ )
+                cost += x264_slicetype_frame_cost( h, a, frames, cur_p, middle, next_b, 0 );
+            for( next_b = middle+1; next_b < next_p && cost < threshold; next_b++ )
+                cost += x264_slicetype_frame_cost( h, a, frames, middle, next_p, next_b, 0 );
+        }
+        else
+            for( next_b = loc; next_b < next_p && cost < threshold; next_b++ )
+                cost += x264_slicetype_frame_cost( h, a, frames, cur_p, next_p, next_b, 0 );
 
         loc = next_p + 1;
         cur_p = next_p;

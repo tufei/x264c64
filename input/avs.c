@@ -57,6 +57,7 @@ typedef struct
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     HMODULE library;
+    int num_frames;
     /* declare function pointers for the utilized functions to be loaded without __declspec,
        as the avisynth header does not compensate for this type of usage */
     struct
@@ -154,6 +155,17 @@ static int open_file( char *psz_filename, hnd_t *p_handle, x264_param_t *p_param
             fprintf( stderr, "avs [error]: %s\n", avs_as_string( res ) );
             return -1;
         }
+        /* check if the user is using a multi-threaded script and apply distributor if necessary.
+           adapted from avisynth's vfw interface */
+        AVS_Value mt_test = h->func.avs_invoke( h->env, "GetMTMode", avs_new_value_bool( 0 ), NULL );
+        int mt_mode = avs_is_int( mt_test ) ? avs_as_int( mt_test ) : 0;
+        h->func.avs_release_value( mt_test );
+        if( mt_mode > 0 && mt_mode < 5 )
+        {
+            AVS_Value temp = h->func.avs_invoke( h->env, "Distributor", res, NULL );
+            h->func.avs_release_value( res );
+            res = temp;
+        }
     }
     else /* non script file */
     {
@@ -212,7 +224,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle, x264_param_t *p_param
     if( !avs_is_yv12( vi ) || avs_version >= AVS_INTERFACE_OTHER_PLANAR )
     {
         h->func.avs_release_clip( h->clip );
-        fprintf( stderr, "avs [warning]: converting input clip to YV12\n" );
+        fprintf( stderr, "avs %s\n", !avs_is_yv12( vi ) ? "[warning]: converting input clip to YV12"
+               : "[info]: Avisynth 2.6+ detected, forcing conversion to YV12" );
         const char *arg_name[2] = { NULL, "interlaced" };
         AVS_Value arg_arr[2] = { res, avs_new_value_bool( p_param->b_interlaced ) };
         AVS_Value res2 = h->func.avs_invoke( h->env, "ConvertToYV12", avs_new_value_array( arg_arr, 2 ), arg_name );
@@ -231,12 +244,13 @@ static int open_file( char *psz_filename, hnd_t *p_handle, x264_param_t *p_param
     p_param->i_height = vi->height;
     p_param->i_fps_num = vi->fps_numerator;
     p_param->i_fps_den = vi->fps_denominator;
+    h->num_frames = vi->num_frames;
     p_param->i_csp = X264_CSP_YV12;
 
     fprintf( stderr, "avs [info]: %dx%d @ %.2f fps (%d frames)\n",
              p_param->i_width, p_param->i_height,
              (double)p_param->i_fps_num / p_param->i_fps_den,
-             vi->num_frames );
+             h->num_frames );
 
     *p_handle = h;
     return 0;
@@ -245,8 +259,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, x264_param_t *p_param
 static int get_frame_total( hnd_t handle )
 {
     avs_hnd_t *h = handle;
-    const AVS_VideoInfo *vi = h->func.avs_get_video_info( h->clip );
-    return vi->num_frames;
+    return h->num_frames;
 }
 
 static int picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height )
@@ -261,6 +274,8 @@ static int read_frame( x264_picture_t *p_pic, hnd_t handle, int i_frame )
 {
     static int plane[3] = { AVS_PLANAR_Y, AVS_PLANAR_V, AVS_PLANAR_U };
     avs_hnd_t *h = handle;
+    if( i_frame >= h->num_frames )
+        return -1;
     AVS_VideoFrame *frm =
     p_pic->opaque = h->func.avs_get_frame( h->clip, i_frame );
     int i;

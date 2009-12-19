@@ -254,35 +254,105 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "Example usage:\n" );
     H0( "\n" );
     H0( "      Constant quality mode:\n" );
-    H0( "            x264 --crf 24 -o output input\n" );
+    H0( "            x264 --crf 24 -o <output> <input>\n" );
     H0( "\n" );
     H0( "      Two-pass with a bitrate of 1000kbps:\n" );
-    H0( "            x264 --pass 1 --bitrate 1000 -o output input\n" );
-    H0( "            x264 --pass 2 --bitrate 1000 -o output input\n" );
+    H0( "            x264 --pass 1 --bitrate 1000 -o <output> <input>\n" );
+    H0( "            x264 --pass 2 --bitrate 1000 -o <output> <input>\n" );
     H0( "\n" );
     H0( "      Lossless:\n" );
-    H0( "            x264 --crf 0 -o output input\n" );
+    H0( "            x264 --crf 0 -o <output> <input>\n" );
     H0( "\n" );
     H0( "      Maximum PSNR at the cost of speed and visual quality:\n" );
-    H0( "            x264 --preset placebo --tune psnr -o output input\n" );
+    H0( "            x264 --preset placebo --tune psnr -o <output> <input>\n" );
     H0( "\n" );
     H0( "      Constant bitrate at 1000kbps with a 2 second-buffer:\n");
-    H0( "            x264 --vbv-bufsize 2000 --bitrate 1000 -o output input\n" );
+    H0( "            x264 --vbv-bufsize 2000 --bitrate 1000 -o <output> <input>\n" );
     H0( "\n" );
     H0( "Presets:\n" );
     H0( "\n" );
     H0( "      --profile               Force H.264 profile [high]\n" );
-    H0( "                                  Overrides all settings\n");
-    H0( "                                  - baseline,main,high\n" );
+    H0( "                                  Overrides all settings\n" );
+    H2( "                                  - baseline:\n"
+        "                                    --no-8x8dct --bframes 0 --no-cabac\n"
+        "                                    --cqm flat --weightp 0 No interlaced\n"
+        "                                    No lossless\n"
+        "                                  - main:\n"
+        "                                    --no-8x8dct --cqm flat No lossless\n"
+        "                                  - high:\n"
+        "                                    No lossless\n" );
+        else H0( "                                  - baseline,main,high\n" );
     H0( "      --preset                Use a preset to select encoding settings [medium]\n" );
-    H0( "                                  Overridden by user settings\n");
-    H0( "                                  - ultrafast,veryfast,faster,fast,medium\n"
-        "                                  - slow,slower,veryslow,placebo\n" );
+    H0( "                                  Overridden by user settings\n" );
+    H2( "                                  - ultrafast:\n"
+        "                                    --no-8x8dct --aq-mode 0 --b-adapt 0\n"
+        "                                    --bframes 0 --no-cabac --no-deblock\n"
+        "                                    --no-mbtree --me dia --no-mixed-refs\n"
+        "                                    --partitions none --ref 1 --scenecut 0\n"
+        "                                    --subme 0 --trellis 0 --no-weightb\n"
+        "                                    --weightp 0\n"
+        "                                  - veryfast:\n"
+        "                                    --no-mbtree --me dia --no-mixed-refs\n"
+        "                                    --partitions i8x8,i4x4 --ref 1\n"
+        "                                    --subme 1 --trellis 0 --weightp 0\n"
+        "                                  - faster:\n"
+        "                                    --no-mbtree --no-mixed-refs --refs 2\n"
+        "                                    --subme 4 --weightp 1\n"
+        "                                  - fast\n"
+        "                                    --rc-lookahead 30 --ref 2 --subme 6\n"
+        "                                  - medium\n"
+        "                                    Default settings apply.\n"
+        "                                  - slow\n"
+        "                                    --b-adapt 2 --direct auto --me umh\n"
+        "                                    --rc-lookahead 50 --ref 5 --subme 8\n"
+        "                                  - slower\n"
+        "                                    --b-adapt 2 --direct auto --me umh\n"
+        "                                    --partitions all --rc-lookahead 60\n"
+        "                                    --ref 8 --subme 9 --trellis 2\n"
+        "                                  - veryslow\n"
+        "                                    --b-adapt 2 --bframes 8 --direct auto\n"
+        "                                    --me umh --me-range 24 --partitions all\n"
+        "                                    --ref 16 --subme 10 --trellis 2\n"
+        "                                    --rc-lookahead 60\n"
+        "                                  - placebo\n"
+        "                                    --bframes 16 --b-adapt 2 --direct auto\n"
+        "                                    --slow-firstpass --no-fast-pskip\n"
+        "                                    --me tesa --me-range 24 --partitions all\n"
+        "                                    --rc-lookahead 60 --ref 16 --subme 10\n"
+        "                                    --trellis 2\n" );
+    else H0( "                                  - ultrafast,veryfast,faster,fast,medium\n"
+             "                                  - slow,slower,veryslow,placebo\n" );
     H0( "      --tune                  Tune the settings for a particular type of source\n" );
-    H0( "                                  Overridden by user settings\n");
-    H2( "                                  - film,animation,grain,psnr,ssim\n"
-        "                                  - fastdecode,touhou\n");
-    else H0( "                                  - film,animation,grain,psnr,ssim,fastdecode\n");
+    H0( "                                  Overridden by user settings\n" );
+    H2( "                                  - film:\n"
+        "                                    --deblock -1:-1 --psy-rd <unset>:0.15\n"
+        "                                  - animation:\n"
+        "                                    --bframes {+2} --deblock 1:1\n"
+        "                                    --psy-rd 0.4:<unset> --aq-strength 0.6\n"
+        "                                    --ref {Double if >1 else 1}\n"
+        "                                  - grain:\n"
+        "                                    --aq-strength 0.5 --no-dct-decimate\n"
+        "                                    --deadzone-inter 6 --deadzone-intra 6\n"
+        "                                    --deblock -2:-2 --ipratio 1.1 \n"
+        "                                    --pbratio 1.1 --psy-rd <unset>:0.25\n"
+        "                                    --qcomp 0.8\n"
+        "                                  - psnr:\n"
+        "                                    --aq-mode 0 --no-psy\n"
+        "                                  - ssim:\n"
+        "                                    --aq-mode 2 --no-psy\n"
+        "                                  - fastdecode:\n"
+        "                                    --no-cabac --no-deblock --no-weightb\n"
+        "                                    --weightp 0\n"
+        "                                  - zerolatency:\n"
+        "                                    --bframes 0 --rc-lookahead 0\n"
+        "                                    --sync-lookahead 0 --sliced-threads\n"
+        "                                  - touhou:\n"
+        "                                    --aq-strength 1.3 --deblock -1:-1\n"
+        "                                    --partitions {p4x4 if p8x8 set}\n"
+        "                                    --psy-rd <unset>:0.2\n"
+        "                                    --ref {Double if >1 else 1}\n" );
+    else H0( "                                  - film,animation,grain,psnr,ssim\n"
+             "                                  - fastdecode,zerolatency\n" );
     H1( "      --slow-firstpass        Don't use faster settings with --pass 1\n" );
     H0( "\n" );
     H0( "Frame-type options:\n" );
@@ -476,6 +546,7 @@ static void Help( x264_param_t *defaults, int longhelp )
     H1( "      --psnr                  Enable PSNR computation\n" );
     H1( "      --ssim                  Enable SSIM computation\n" );
     H1( "      --threads <integer>     Force a specific number of threads\n" );
+    H2( "      --sliced-threads        Low-latency but lower-efficiency threading\n" );
     H2( "      --thread-input          Run Avisynth in its own thread\n" );
     H2( "      --sync-lookahead <integer> Number of buffer frames for threaded lookahead\n" );
     H2( "      --non-deterministic     Slightly improve quality of SMP, at the cost of repeatability\n" );
@@ -595,6 +666,8 @@ static struct option long_options[] =
     { "zones",       required_argument, NULL, 0 },
     { "qpfile",      required_argument, NULL, OPT_QPFILE },
     { "threads",     required_argument, NULL, 0 },
+    { "sliced-threads",    no_argument, NULL, 0 },
+    { "no-sliced-threads", no_argument, NULL, 0 },
     { "slice-max-size",    required_argument, NULL, 0 },
     { "slice-max-mbs",     required_argument, NULL, 0 },
     { "slices",            required_argument, NULL, 0 },
@@ -909,6 +982,13 @@ static int  Parse( int argc, char **argv,
                 param->b_cabac = 0;
                 param->analyse.b_weighted_bipred = 0;
                 param->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
+            }
+            else if( !strcasecmp( optarg, "zerolatency" ) )
+            {
+                param->rc.i_lookahead = 0;
+                param->i_sync_lookahead = 0;
+                param->i_bframe = 0;
+                param->b_sliced_threads = 1;
             }
             else if( !strcasecmp( optarg, "touhou" ) )
             {
