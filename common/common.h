@@ -91,6 +91,7 @@ do {\
 #include <assert.h>
 #include <limits.h>
 
+#ifndef _TMS320C6400
 /* Unions for type-punning.
  * Mn: load or store n bits, aligned, native-endian
  * CPn: copy n bits, aligned, native-endian
@@ -104,6 +105,14 @@ typedef union { uint64_t i; uint32_t a[2]; uint16_t b[4]; uint8_t c[8]; } MAY_AL
 #define CP16(dst,src) M16(dst) = M16(src)
 #define CP32(dst,src) M32(dst) = M32(src)
 #define CP64(dst,src) M64(dst) = M64(src)
+#else
+#define M16(src) (_mem2(src))
+#define M32(src) (_mem4(src))
+#define M64(src) (_mem8(src))
+#define CP16(dst,src) (_mem2(dst)) = (_mem2_const(src))
+#define CP32(dst,src) (_mem4(dst)) = (_mem4_const(src))
+#define CP64(dst,src) (_mem8(dst)) = (_mem8_const(src))
+#endif /* _TMS320C6400 */
 
 #include "x264.h"
 #include "bs.h"

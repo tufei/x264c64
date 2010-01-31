@@ -732,10 +732,10 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
         {\
             /* *** Get bS for each 4px for the current edge *** */\
             if( IS_INTRA( h->mb.type[mb_xy] ) || IS_INTRA( h->mb.type[mbn_xy]) )\
-                _mem4( bS ) = 0x03030303;\
+                M32( bS ) = 0x03030303;\
             else\
             {\
-                _mem4( bS ) = 0x00000000;\
+                M32( bS ) = 0x00000000;\
                 for( i = 0; i < 4; i++ )\
                 {\
                     int x  = i_dir == 0 ? i_edge : i;\
@@ -805,7 +805,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
                     goto end##i_dir;\
                 }\
                 DEBLOCK_STRENGTH(i_dir);\
-                if( _mem4_const( bS ) )\
+                if( M32( bS ) )\
                     FILTER_DIR( , i_dir);\
                 end##i_dir:\
                 i_edge += b_8x8_transform+1;\
@@ -816,7 +816,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
             for( ; i_edge < i_edge_end; i_edge+=b_8x8_transform+1 )\
             {\
                 DEBLOCK_STRENGTH(i_dir);\
-                if( _mem4_const( bS ) )\
+                if( M32( bS ) )\
                     FILTER_DIR( , i_dir);\
             }\
         }

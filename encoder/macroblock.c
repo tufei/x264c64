@@ -157,21 +157,6 @@ void x264_mb_encode_i4x4( x264_t *h, int idx, int i_qp )
     }
 }
 
-#ifdef _TMS320C6400
-#define STORE_8x8_NNZ(idx,nz)\
-{\
-    _mem2(&h->mb.cache.non_zero_count[x264_scan8[idx*4+0]]) = nz * 0x0101;\
-    _mem2(&h->mb.cache.non_zero_count[x264_scan8[idx*4+2]]) = nz * 0x0101;\
-}
-
-#define CLEAR_16x16_NNZ \
-{\
-    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = 0;\
-    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = 0;\
-    _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = 0;\
-    _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = 0;\
-}
-#else
 #define STORE_8x8_NNZ(idx,nz)\
 {\
     M16( &h->mb.cache.non_zero_count[x264_scan8[idx*4+0]] ) = nz * 0x0101;\
@@ -185,7 +170,6 @@ void x264_mb_encode_i4x4( x264_t *h, int idx, int i_qp )
     M32( &h->mb.cache.non_zero_count[x264_scan8[ 8]] ) = 0;\
     M32( &h->mb.cache.non_zero_count[x264_scan8[10]] ) = 0;\
 }
-#endif /* _TMS320C6400 */
 
 void x264_mb_encode_i8x8( x264_t *h, int idx, int i_qp )
 {
@@ -686,17 +670,10 @@ void x264_macroblock_encode( x264_t *h )
         if( h->mb.i_skip_intra )
         {
             h->mc.copy[PIXEL_16x16]( h->mb.pic.p_fdec[0], FDEC_STRIDE, h->mb.pic.i8x8_fdec_buf, 16, 16 );
-#ifdef _TMS320C6400
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = h->mb.pic.i8x8_nnz_buf[0];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = h->mb.pic.i8x8_nnz_buf[1];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = h->mb.pic.i8x8_nnz_buf[2];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = h->mb.pic.i8x8_nnz_buf[3];
-#else
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 0]] ) = h->mb.pic.i8x8_nnz_buf[0];
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 2]] ) = h->mb.pic.i8x8_nnz_buf[1];
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 8]] ) = h->mb.pic.i8x8_nnz_buf[2];
             M32( &h->mb.cache.non_zero_count[x264_scan8[10]] ) = h->mb.pic.i8x8_nnz_buf[3];
-#endif
             h->mb.i_cbp_luma = h->mb.pic.i8x8_cbp;
             /* In RD mode, restore the now-overwritten DCT data. */
             if( h->mb.i_skip_intra == 2 )
@@ -723,17 +700,10 @@ void x264_macroblock_encode( x264_t *h )
         if( h->mb.i_skip_intra )
         {
             h->mc.copy[PIXEL_16x16]( h->mb.pic.p_fdec[0], FDEC_STRIDE, h->mb.pic.i4x4_fdec_buf, 16, 16 );
-#ifdef _TMS320C6400
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 0]]) = h->mb.pic.i4x4_nnz_buf[0];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 2]]) = h->mb.pic.i4x4_nnz_buf[1];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[ 8]]) = h->mb.pic.i4x4_nnz_buf[2];
-            _mem4(&h->mb.cache.non_zero_count[x264_scan8[10]]) = h->mb.pic.i4x4_nnz_buf[3];
-#else
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 0]] ) = h->mb.pic.i4x4_nnz_buf[0];
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 2]] ) = h->mb.pic.i4x4_nnz_buf[1];
             M32( &h->mb.cache.non_zero_count[x264_scan8[ 8]] ) = h->mb.pic.i4x4_nnz_buf[2];
             M32( &h->mb.cache.non_zero_count[x264_scan8[10]] ) = h->mb.pic.i4x4_nnz_buf[3];
-#endif
             h->mb.i_cbp_luma = h->mb.pic.i4x4_cbp;
             /* In RD mode, restore the now-overwritten DCT data. */
             if( h->mb.i_skip_intra == 2 )
@@ -746,11 +716,7 @@ void x264_macroblock_encode( x264_t *h )
 
             if( (h->mb.i_neighbour4[i] & (MB_TOPRIGHT|MB_TOP)) == MB_TOP )
                 /* emulate missing topright samples */
-#ifdef _TMS320C6400
-                _mem4(&p_dst[4-FDEC_STRIDE]) = p_dst[3-FDEC_STRIDE] * 0x01010101U;
-#else
                 M32( &p_dst[4-FDEC_STRIDE] ) = p_dst[3-FDEC_STRIDE] * 0x01010101U;
-#endif
 
             if( h->mb.b_lossless )
                 x264_predict_lossless_4x4( h, p_dst, i, i_mode );
@@ -936,11 +902,7 @@ void x264_macroblock_encode( x264_t *h )
     {
         if( h->mb.i_type == P_L0 && h->mb.i_partition == D_16x16 &&
             !(h->mb.i_cbp_luma | h->mb.i_cbp_chroma) &&
-#ifdef _TMS320C6400
-            _mem4(h->mb.cache.mv[0][x264_scan8[0]]) == _mem4_const(h->mb.cache.pskip_mv)
-#else
             M32( h->mb.cache.mv[0][x264_scan8[0]] ) == M32( h->mb.cache.pskip_mv )
-#endif
             && h->mb.cache.ref[0][x264_scan8[0]] == 0 )
         {
             h->mb.i_type = P_SKIP;

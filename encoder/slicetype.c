@@ -362,18 +362,10 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
         CLIP_MV( dmv[0] );
         CLIP_MV( dmv[1] );
         if( h->param.analyse.i_subpel_refine <= 1 )
-#ifdef _TMS320C6400
-            _mem8( dmv ) &= ~0x0001000100010001ULL; /* mv & ~1 */
-#else
             M64( dmv ) &= ~0x0001000100010001ULL; /* mv & ~1 */
-#endif
 
         TRY_BIDIR( dmv[0], dmv[1], 0 );
-#ifdef _TMS320C6400
-        if( _mem8_const( dmv ) )
-#else
         if( M64( dmv ) )
-#endif
         {
             int i_cost;
             h->mc.avg[PIXEL_8x8]( pix1, 16, m[0].p_fref[0], m[0].i_stride[0], m[1].p_fref[0], m[1].i_stride[0], i_bipred_weight );
@@ -398,11 +390,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             M32( mvc[0] ) = 0;
             M32( mvc[1] ) = 0;
             M32( mvc[2] ) = 0;
-#ifdef _TMS320C6400
-#define MVC(mv) { _mem4(mvc[i_mvc]) = _mem4_const(mv); i_mvc++; }
-#else
 #define MVC(mv) { CP32( mvc[i_mvc], mv ); i_mvc++; }
-#endif
             if( i_mb_x < h->sps->i_mb_width - 1 )
                 MVC(fenc_mv[1]);
             if( i_mb_y < h->sps->i_mb_height - 1 )
@@ -418,36 +406,20 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             x264_me_search( h, &m[l], mvc, i_mvc );
 
             m[l].cost -= 2; // remove mvcost from skip mbs
-#ifdef _TMS320C6400
-            if( _mem4_const(m[l].mv) )
-#else
             if( M32( m[l].mv ) )
-#endif
                 m[l].cost += 5;
-#ifdef _TMS320C6400
-            _mem4(fenc_mvs[l]) = _mem4_const(m[l].mv);
-#else
             CP32( fenc_mvs[l], m[l].mv );
-#endif
             *fenc_costs[l] = m[l].cost;
         }
         else
         {
-#ifdef _TMS320C6400
-            _mem4(m[l].mv) = _mem4_const(fenc_mvs[l]);
-#else
             CP32( m[l].mv, fenc_mvs[l] );
-#endif
             m[l].cost = *fenc_costs[l];
         }
         COPY2_IF_LT( i_bcost, m[l].cost, list_used, l+1 );
     }
 
-#ifdef _TMS320C6400
-    if( b_bidir && ( _mem4_const(m[0].mv) || _mem4_const(m[1].mv) ) )
-#else
     if( b_bidir && ( M32( m[0].mv ) || M32( m[1].mv ) ) )
-#endif
         TRY_BIDIR( m[0].mv, m[1].mv, 5 );
 
     /* Store to width-2 bitfield. */

@@ -92,11 +92,7 @@ static inline int bs_pos( bs_t *s )
 /* Write the rest of cur_bits to the bitstream; results in a bitstream no longer 32-bit aligned. */
 static inline void bs_flush( bs_t *s )
 {
-#ifdef _TMS320C6400
-    _mem4(s->p) = endian_fix32( s->cur_bits << (s->i_left&31) );
-#else
     M32( s->p ) = endian_fix32( s->cur_bits << (s->i_left&31) );
-#endif
     s->p += WORD_SIZE - s->i_left / 8;
     s->i_left = WORD_SIZE*8;
 }
@@ -109,19 +105,11 @@ static inline void bs_write( bs_t *s, int i_count, uint32_t i_bits )
         s->i_left -= i_count;
         if( s->i_left <= 32 )
         {
-#ifdef _TMS320C6400
-#ifdef WORDS_BIGENDIAN
-            _mem4(s->p) = s->cur_bits >> (32 - s->i_left);
-#else
-            _mem4(s->p) = endian_fix( s->cur_bits << s->i_left );
-#endif
-#else /* _TMS320C6400 */
 #ifdef WORDS_BIGENDIAN
             M32( s->p ) = s->cur_bits >> (32 - s->i_left);
 #else
             M32( s->p ) = endian_fix( s->cur_bits << s->i_left );
 #endif
-#endif /* _TMS320C6400 */
             s->i_left += 32;
             s->p += 4;
         }
@@ -137,11 +125,7 @@ static inline void bs_write( bs_t *s, int i_count, uint32_t i_bits )
         {
             i_count -= s->i_left;
             s->cur_bits = (s->cur_bits << s->i_left) | (i_bits >> i_count);
-#ifdef _TMS320C6400
-            _mem4(s->p) = endian_fix( s->cur_bits );
-#else
             M32( s->p ) = endian_fix( s->cur_bits );
-#endif
             s->p += 4;
             s->cur_bits = i_bits;
             s->i_left = 32 - i_count;
@@ -164,11 +148,7 @@ static inline void bs_write1( bs_t *s, uint32_t i_bit )
     s->i_left--;
     if( s->i_left == WORD_SIZE*8-32 )
     {
-#ifdef _TMS320C6400
-        _mem4(s->p) = endian_fix32( s->cur_bits );
-#else
         M32( s->p ) = endian_fix32( s->cur_bits );
-#endif
         s->p += 4;
         s->i_left = WORD_SIZE*8;
     }

@@ -373,63 +373,6 @@ static ALWAYS_INLINE uint32_t pack16to32_mask( int a, int b )
 }
 #endif /* _TMS320C6400 */
 
-#ifdef _TMS320C6400
-static ALWAYS_INLINE void x264_macroblock_cache_rect1( void *dst, int width, int height, uint8_t val )
-{
-    if(width == 4)
-    {
-        uint32_t val2 = val * 0x01010101;
-
-        _mem4((uint32_t *)dst + 0) = val2;
-        if(height >= 2)
-            _mem4((uint32_t *)dst + 2) = val2;
-        if(height == 4)
-            _mem4((uint32_t *)dst + 4) = val2;
-        if(height == 4)
-            _mem4((uint32_t *)dst + 6) = val2;
-    }
-    else // 2
-    {
-        uint16_t val2 = val * 0x0101;
-
-        _mem2((uint16_t *)dst + 0) = val2;
-        if(height >= 2)
-            _mem2((uint16_t *)dst + 4) = val2;
-        if(height == 4)
-            _mem2((uint16_t *)dst + 8) = val2;
-        if(height == 4)
-            _mem2((uint16_t *)dst + 12) = val2;
-    }
-}
-
-static ALWAYS_INLINE void x264_macroblock_cache_rect4( void *dst, int width, int height, uint32_t val )
-{
-    int dy;
-    if( width == 1 || WORD_SIZE < 8 )
-    {
-        for( dy = 0; dy < height; dy++ )
-        {
-            _mem4((uint32_t *)dst + (8 * dy + 0)) = val;
-            if(width >= 2)
-                _mem4((uint32_t *)dst + (8 * dy + 1)) = val;
-            if(width == 4)
-                _mem4((uint32_t *)dst + (8 * dy + 2)) = val;
-            if(width == 4)
-                _mem4((uint32_t *)dst + (8 * dy + 3)) = val;
-        }
-    }
-    else
-    {
-        uint64_t val64 = val + ((uint64_t)val<<32);
-        for( dy = 0; dy < height; dy++ )
-        {
-            _mem8((uint64_t *)dst + (4 * dy + 0)) = val64;
-            if(width == 4)
-                _mem8((uint64_t *)dst + (4 * dy + 1)) = val64;
-        }
-    }
-}
-#else /* _TMS320C6400 */
 static ALWAYS_INLINE void x264_macroblock_cache_rect1( void *dst, int width, int height, uint8_t val )
 {
     uint32_t *d = dst;
@@ -475,13 +418,8 @@ static ALWAYS_INLINE void x264_macroblock_cache_rect4( void *dst, int width, int
         }
     }
 }
-#endif /* _TMS320C6400 */
 
-#ifdef _TMS320C6400
-#define x264_macroblock_cache_mv_ptr(a,x,y,w,h,l,mv) x264_macroblock_cache_mv(a,x,y,w,h,l,_mem4(mv))
-#else
 #define x264_macroblock_cache_mv_ptr( a, x, y, w, h, l, mv ) x264_macroblock_cache_mv( a, x, y, w, h, l, M32( mv ) )
-#endif
 
 static ALWAYS_INLINE void x264_macroblock_cache_mv( x264_t *h, int x, int y, int width, int height, int i_list, uint32_t mv )
 {
@@ -506,24 +444,6 @@ static ALWAYS_INLINE void x264_macroblock_cache_intra8x8_pred( x264_t *h, int x,
 }
 #define array_non_zero(a) array_non_zero_int(a, sizeof(a))
 #define array_non_zero_int array_non_zero_int
-#ifdef _TMS320C6400
-static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
-{
-    if(i_count == 8)
-        return !!_mem8_const(&v[0]);
-    else if(i_count == 16)
-        return !!(_mem8_const(&v[0]) | _mem8_const(&v[4]));
-    else if(i_count == 32)
-        return !!(_mem8_const(&v[0]) | _mem8_const(&v[4]) | _mem8_const(&v[8]) | _mem8_const(&v[12]));
-    else
-    {
-        int i;
-        for( i = 0; i < i_count; i+=4 )
-            if( _mem8_const(&v[i]) ) return 1;
-        return 0;
-    }
-}
-#else
 static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
 {
     if(i_count == 8)
@@ -540,7 +460,6 @@ static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
         return 0;
     }
 }
-#endif /* _TMS320C6400 */
 
 static inline int x264_mb_predict_intra4x4_mode( x264_t *h, int idx )
 {
@@ -584,11 +503,7 @@ static inline int x264_mb_transform_8x8_allowed( x264_t *h )
         return 0;
     if( h->mb.i_type != P_8x8 )
         return partition_tab[h->mb.i_type];
-#ifdef _TMS320C6400
-    return _mem4_const( h->mb.i_sub_partition ) == D_L0_8x8*0x01010101;
-#else
     return M32( h->mb.i_sub_partition ) == D_L0_8x8*0x01010101;
-#endif
 }
 
 #endif

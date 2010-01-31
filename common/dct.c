@@ -621,16 +621,6 @@ static void zigzag_scan_4x4_frame( int16_t level[16], int16_t dct[16] )
     ZIGZAG4_FRAME
 }
 
-#ifdef _TMS320C6400
-static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
-{
-    _mem4(level) = _mem4(dct);
-    ZIG(2,0,1) ZIG(3,2,0) ZIG(4,3,0) ZIG(5,1,1)
-    _mem4(level + 6) = _mem4(dct + 6);
-    _mem8(level + 8) = _mem8(dct + 8);
-    _mem8(level + 12) = _mem8(dct + 12);
-}
-#else
 static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
 {
     CP32( level, dct );
@@ -639,7 +629,6 @@ static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
     CP64( level+8, dct+8 );
     CP64( level+12, dct+12 );
 }
-#endif /* _TMS320C6400 */
 
 #undef ZIG
 #define ZIG(i,y,x) {\
@@ -649,22 +638,6 @@ static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
     nz |= level[i];\
 }
 
-#ifdef _TMS320C6400
-#define COPY4x4\
-    _mem4(p_dst + 0 * FDEC_STRIDE) = _mem4_const(p_src + 0 * FENC_STRIDE);\
-    _mem4(p_dst + 1 * FDEC_STRIDE) = _mem4_const(p_src + 1 * FENC_STRIDE);\
-    _mem4(p_dst + 2 * FDEC_STRIDE) = _mem4_const(p_src + 2 * FENC_STRIDE);\
-    _mem4(p_dst + 3 * FDEC_STRIDE) = _mem4_const(p_src + 3 * FENC_STRIDE);
-#define COPY8x8\
-    _mem8(p_dst + 0 * FDEC_STRIDE) = _mem8_const(p_src + 0 * FENC_STRIDE);\
-    _mem8(p_dst + 1 * FDEC_STRIDE) = _mem8_const(p_src + 1 * FENC_STRIDE);\
-    _mem8(p_dst + 2 * FDEC_STRIDE) = _mem8_const(p_src + 2 * FENC_STRIDE);\
-    _mem8(p_dst + 3 * FDEC_STRIDE) = _mem8_const(p_src + 3 * FENC_STRIDE);\
-    _mem8(p_dst + 4 * FDEC_STRIDE) = _mem8_const(p_src + 4 * FENC_STRIDE);\
-    _mem8(p_dst + 5 * FDEC_STRIDE) = _mem8_const(p_src + 5 * FENC_STRIDE);\
-    _mem8(p_dst + 6 * FDEC_STRIDE) = _mem8_const(p_src + 6 * FENC_STRIDE);\
-    _mem8(p_dst + 7 * FDEC_STRIDE) = _mem8_const(p_src + 7 * FENC_STRIDE);
-#else
 #define COPY4x4\
     CP32( p_dst+0*FDEC_STRIDE, p_src+0*FENC_STRIDE );\
     CP32( p_dst+1*FDEC_STRIDE, p_src+1*FENC_STRIDE );\
@@ -679,7 +652,6 @@ static void zigzag_scan_4x4_field( int16_t level[16], int16_t dct[16] )
     CP64( p_dst+5*FDEC_STRIDE, p_src+5*FENC_STRIDE );\
     CP64( p_dst+6*FDEC_STRIDE, p_src+6*FENC_STRIDE );\
     CP64( p_dst+7*FDEC_STRIDE, p_src+7*FENC_STRIDE );
-#endif /* _TMS320C6400 */
 
 static int zigzag_sub_4x4_frame( int16_t level[16], const uint8_t *p_src, uint8_t *p_dst )
 {

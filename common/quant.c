@@ -181,11 +181,7 @@ static int ALWAYS_INLINE x264_decimate_score_internal( int16_t *dct, int i_max )
     int idx = i_max - 1;
 
     /* Yes, dct[idx-1] is guaranteed to be 32-bit aligned.  idx>=0 instead of 1 works correctly for the same reason */
-#ifdef _TMS320C6400
-    while( idx >= 0 && _mem4(&dct[idx-1]) == 0 ) /* on safe side YFY --01/01/2009 */
-#else
     while( idx >= 0 && M32( &dct[idx-1] ) == 0 )
-#endif
         idx -= 2;
     if( idx >= 0 && dct[idx] == 0 )
         idx--;
@@ -225,11 +221,7 @@ static int ALWAYS_INLINE x264_coeff_last_internal( int16_t *l, int i_count )
 {
     int i_last;
     for( i_last = i_count-1; i_last >= 3; i_last -= 4 )
-#ifdef _TMS320C6400
-        if( _mem8(l + i_last - 3) )
-#else
         if( M64( l+i_last-3 ) )
-#endif
             break;
     while( i_last >= 0 && l[i_last] == 0 )
         i_last--;
