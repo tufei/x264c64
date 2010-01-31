@@ -1388,7 +1388,11 @@ int x264_ratecontrol_end( x264_t *h, int bits )
 
         if( h->sh.weight[0][0].weightfn )
         {
+#ifdef _TMS320C6400
+            if( fprintf( rc->p_stat_file_out, "w:%d,%d,%d", h->sh.weight[0][0].i_denom, h->sh.weight[0][0].i_scale, h->sh.weight[0][0].i_offset ) < 0 )
+#else
             if( fprintf( rc->p_stat_file_out, "w:%"PRId32",%"PRId32",%"PRId32, h->sh.weight[0][0].i_denom, h->sh.weight[0][0].i_scale, h->sh.weight[0][0].i_offset ) < 0 )
+#endif /* _TMS320C6400 */
                 goto fail;
         }
 

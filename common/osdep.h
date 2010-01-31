@@ -262,10 +262,14 @@ static int ALWAYS_INLINE x264_clz( uint32_t x )
 
 static inline uint8_t x264_is_regular_file( FILE *filehandle )
 {
+#ifdef _TMS320C6400
+    return !!filehandle;
+#else
     struct stat file_stat;
     if( fstat( fileno( filehandle ), &file_stat ) )
         return 0;
     return S_ISREG( file_stat.st_mode );
+#endif /* _TMS320C6400 */
 }
 
 #endif /* X264_OSDEP_H */

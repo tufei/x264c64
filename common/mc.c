@@ -511,7 +511,7 @@ void x264_mc_init( int cpu, x264_mc_functions_t *pf )
 #ifdef HAVE_ARMV6
     x264_mc_init_arm( cpu, pf );
 #endif
-#ifdef _TMS320C6400
+#ifndef _TMS320C6400
     x264_mc_init_c64( pf );
 #endif
 }

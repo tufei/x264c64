@@ -506,6 +506,24 @@ static ALWAYS_INLINE void x264_macroblock_cache_intra8x8_pred( x264_t *h, int x,
 }
 #define array_non_zero(a) array_non_zero_int(a, sizeof(a))
 #define array_non_zero_int array_non_zero_int
+#ifdef _TMS320C6400
+static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
+{
+    if(i_count == 8)
+        return !!_mem8_const(&v[0]);
+    else if(i_count == 16)
+        return !!(_mem8_const(&v[0]) | _mem8_const(&v[4]));
+    else if(i_count == 32)
+        return !!(_mem8_const(&v[0]) | _mem8_const(&v[4]) | _mem8_const(&v[8]) | _mem8_const(&v[12]));
+    else
+    {
+        int i;
+        for( i = 0; i < i_count; i+=4 )
+            if( _mem8_const(&v[i]) ) return 1;
+        return 0;
+    }
+}
+#else
 static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
 {
     if(i_count == 8)
@@ -522,6 +540,8 @@ static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
         return 0;
     }
 }
+#endif /* _TMS320C6400 */
+
 static inline int x264_mb_predict_intra4x4_mode( x264_t *h, int idx )
 {
     const int ma = h->mb.cache.intra4x4_pred_mode[x264_scan8[idx] - 1];
@@ -564,7 +584,11 @@ static inline int x264_mb_transform_8x8_allowed( x264_t *h )
         return 0;
     if( h->mb.i_type != P_8x8 )
         return partition_tab[h->mb.i_type];
+#ifdef _TMS320C6400
+    return _mem4_const( h->mb.i_sub_partition ) == D_L0_8x8*0x01010101;
+#else
     return M32( h->mb.i_sub_partition ) == D_L0_8x8*0x01010101;
+#endif
 }
 
 #endif

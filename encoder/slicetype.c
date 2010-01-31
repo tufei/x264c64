@@ -362,10 +362,18 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
         CLIP_MV( dmv[0] );
         CLIP_MV( dmv[1] );
         if( h->param.analyse.i_subpel_refine <= 1 )
+#ifdef _TMS320C6400
+            _mem8( dmv ) &= ~0x0001000100010001ULL; /* mv & ~1 */
+#else
             M64( dmv ) &= ~0x0001000100010001ULL; /* mv & ~1 */
+#endif
 
         TRY_BIDIR( dmv[0], dmv[1], 0 );
+#ifdef _TMS320C6400
+        if( _mem8_const( dmv ) )
+#else
         if( M64( dmv ) )
+#endif
         {
             int i_cost;
             h->mc.avg[PIXEL_8x8]( pix1, 16, m[0].p_fref[0], m[0].i_stride[0], m[1].p_fref[0], m[1].i_stride[0], i_bipred_weight );
@@ -390,7 +398,11 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             M32( mvc[0] ) = 0;
             M32( mvc[1] ) = 0;
             M32( mvc[2] ) = 0;
+#ifdef _TMS320C6400
+#define MVC(mv) { _mem4(mvc[i_mvc]) = _mem4_const(mv); i_mvc++; }
+#else
 #define MVC(mv) { CP32( mvc[i_mvc], mv ); i_mvc++; }
+#endif
             if( i_mb_x < h->sps->i_mb_width - 1 )
                 MVC(fenc_mv[1]);
             if( i_mb_y < h->sps->i_mb_height - 1 )
@@ -406,20 +418,36 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
             x264_me_search( h, &m[l], mvc, i_mvc );
 
             m[l].cost -= 2; // remove mvcost from skip mbs
+#ifdef _TMS320C6400
+            if( _mem4_const(m[l].mv) )
+#else
             if( M32( m[l].mv ) )
+#endif
                 m[l].cost += 5;
+#ifdef _TMS320C6400
+            _mem4(fenc_mvs[l]) = _mem4_const(m[l].mv);
+#else
             CP32( fenc_mvs[l], m[l].mv );
+#endif
             *fenc_costs[l] = m[l].cost;
         }
         else
         {
+#ifdef _TMS320C6400
+            _mem4(m[l].mv) = _mem4_const(fenc_mvs[l]);
+#else
             CP32( m[l].mv, fenc_mvs[l] );
+#endif
             m[l].cost = *fenc_costs[l];
         }
         COPY2_IF_LT( i_bcost, m[l].cost, list_used, l+1 );
     }
 
+#ifdef _TMS320C6400
+    if( b_bidir && ( _mem4_const(m[0].mv) || _mem4_const(m[1].mv) ) )
+#else
     if( b_bidir && ( M32( m[0].mv ) || M32( m[1].mv ) ) )
+#endif
         TRY_BIDIR( m[0].mv, m[1].mv, 5 );
 
     /* Store to width-2 bitfield. */
@@ -671,7 +699,6 @@ static void x264_macroblock_tree_finish( x264_t *h, x264_frame_t *frame, int ref
 static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, int p0, int p1, int b, int referenced )
 {
 #ifndef _TMS320C6400
-    x264_frame_t *refs[2] = {frames[p0],frames[p1]};
     uint16_t *ref_costs[2] = {frames[p0]->i_propagate_cost,frames[p1]->i_propagate_cost};
     int dist_scale_factor = ( ((b-p0) << 8) + ((p1-p0) >> 1) ) / (p1-p0);
     int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
@@ -680,7 +707,6 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     int *buf = h->scratch_buffer;
     uint16_t *propagate_cost = frames[b]->i_propagate_cost;
 #else
-    x264_frame_t *refs[2];
     uint16_t *ref_costs[2];
     int dist_scale_factor = ( ((b-p0) << 8) + ((p1-p0) >> 1) ) / (p1-p0);
     int i_bipred_weight = h->param.analyse.b_weighted_bipred ? 64 - (dist_scale_factor>>2) : 32;
@@ -689,8 +715,6 @@ static void x264_macroblock_tree_propagate( x264_t *h, x264_frame_t **frames, in
     int bipred_weights[2];
     uint16_t *propagate_cost = frames[b]->i_propagate_cost;
 
-    refs[0] = frames[p0];
-    refs[1] = frames[p1];
     ref_costs[0] = frames[p0]->i_propagate_cost;
     ref_costs[1] = frames[p1]->i_propagate_cost;
     mvs[0] = frames[b]->lowres_mvs[0][b-p0-1];
@@ -950,7 +974,7 @@ static void x264_slicetype_path( x264_t *h, x264_mb_analysis_t *a, x264_frame_t 
     int best_path_index = 0;
 
 #ifdef _TMS320C6400
-    memset(paths, 0, X264_LOOKAHEAD_MAX * (X264_BFRAME_MAX + 2));
+    memset(paths, 0, sizeof(paths));
 #endif
     /* Iterate over all currently possible paths */
     for( path = 0; path < num_paths; path++ )
@@ -1143,7 +1167,7 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
             int n;
 
 #ifdef _TMS320C6400
-	    memset(best_paths, 0, X264_LOOKAHEAD_MAX * X264_LOOKAHEAD_MAX * sizeof(char));
+	    memset(best_paths, 0, sizeof(best_paths));
 	    best_paths[1][0] = 'P';
 #endif
             /* Perform the frametype analysis. */

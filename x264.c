@@ -722,11 +722,23 @@ static int select_output( char *filename, const char *pipe_format, x264_param_t 
 #endif
     }
     else if( !strcasecmp( ext, "mkv" ) )
+    {
+#ifdef MKV_OUTPUT
         output = mkv_output; // FIXME use b_annexb=0
+#else
+        fprintf( stderr, "x264 [error]: not compiled with MKV output support\n" );
+        return -1;
+#endif
+    }
     else if( !strcasecmp( ext, "flv" ) )
     {
+#ifdef FLV_OUTPUT
         output = flv_output;
         param->b_annexb = 0;
+#else
+        fprintf( stderr, "x264 [error]: not compiled with FLV output support\n" );
+        return -1;
+#endif
     }
     else
         output = raw_output;

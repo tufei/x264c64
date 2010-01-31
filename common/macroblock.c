@@ -1002,7 +1002,6 @@ static void ALWAYS_INLINE x264_macroblock_load_pic_pointers( x264_t *h, int i_mb
     int j, k;
 #else
     int ref_pix_offset[2];
-    const uint8_t *intra_fdec = &h->mb.intra_border_backup[i_mb_y & h->sh.b_mbaff][i][i_mb_x*16>>!!i];
     x264_frame_t **fref[2];
     int j, k;
 
@@ -1100,6 +1099,7 @@ void x264_macroblock_cache_load( x264_t *h, int i_mb_x, int i_mb_y )
         /* load non_zero_count */
         CP32( &h->mb.cache.non_zero_count[x264_scan8[0] - 8], &h->mb.non_zero_count[i_top_xy][12] );
         /* shift because x264_scan8[16] is misaligned */
+        M32( &h->mb.cache.non_zero_count[x264_scan8[16+0] - 9] ) = M16( &h->mb.non_zero_count[i_top_xy][18] ) << 8;
         M32( &h->mb.cache.non_zero_count[x264_scan8[16+4] - 9] ) = M16( &h->mb.non_zero_count[i_top_xy][22] ) << 8;
 #endif /* _TMS320C6400 */
     }

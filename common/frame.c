@@ -732,10 +732,10 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
         {\
             /* *** Get bS for each 4px for the current edge *** */\
             if( IS_INTRA( h->mb.type[mb_xy] ) || IS_INTRA( h->mb.type[mbn_xy]) )\
-                _mem4(bS) = 0x03030303;\
+                _mem4( bS ) = 0x03030303;\
             else\
             {\
-                _mem4(bS) = 0x00000000;\
+                _mem4( bS ) = 0x00000000;\
                 for( i = 0; i < 4; i++ )\
                 {\
                     int x  = i_dir == 0 ? i_edge : i;\
@@ -751,15 +751,20 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
                             bS[i] = bS[i-1];\
                         else\
                         {\
-                            /* FIXME: A given frame may occupy more than one position in\
-                             * the reference list. So we should compare the frame numbers,\
-                             * not the indices in the ref list.\
-                             * No harm yet, as we don't generate that case.*/\
                             int i8p= mb_8x8+(x>>1)+(y>>1)*s8x8;\
                             int i8q= mbn_8x8+(xn>>1)+(yn>>1)*s8x8;\
                             int i4p= mb_4x4+x+y*s4x4;\
                             int i4q= mbn_4x4+xn+yn*s4x4;\
-                            if((h->mb.ref[0][i8p] != h->mb.ref[0][i8q] ||\
+                            int refs_equal;\
+                            /* We don't use duplicate refs in B-frames, so we can take this shortcut for now. */ \
+                            if( h->sh.i_type == SLICE_TYPE_B || h->mb.ref[0][i8p] < 0 || h->mb.ref[0][i8q] < 0 )\
+                                refs_equal = h->mb.ref[0][i8p] == h->mb.ref[0][i8q];\
+                            else if( !h->mb.b_interlaced )\
+                                refs_equal = h->fref0[h->mb.ref[0][i8p]]->i_poc == h->fref0[h->mb.ref[0][i8q]]->i_poc;\
+                            else\
+                                refs_equal = h->fref0[h->mb.ref[0][i8p]>>1]->i_poc == h->fref0[h->mb.ref[0][i8q]>>1]->i_poc\
+                                           && (h->mb.ref[0][i8p]&1) == (h->mb.ref[0][i8q]&1);\
+                            if((!refs_equal ||\
                                 abs( h->mb.mv[0][i4p][0] - h->mb.mv[0][i4q][0] ) >= 4 ||\
                                 abs( h->mb.mv[0][i4p][1] - h->mb.mv[0][i4q][1] ) >= mvy_limit ) ||\
                                (h->sh.i_type == SLICE_TYPE_B &&\
@@ -800,7 +805,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
                     goto end##i_dir;\
                 }\
                 DEBLOCK_STRENGTH(i_dir);\
-                if( _mem4(bS) )\
+                if( _mem4_const( bS ) )\
                     FILTER_DIR( , i_dir);\
                 end##i_dir:\
                 i_edge += b_8x8_transform+1;\
@@ -811,7 +816,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
             for( ; i_edge < i_edge_end; i_edge+=b_8x8_transform+1 )\
             {\
                 DEBLOCK_STRENGTH(i_dir);\
-                if( _mem4(bS) )\
+                if( _mem4_const( bS ) )\
                     FILTER_DIR( , i_dir);\
             }\
         }
@@ -958,11 +963,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
         {\
             int i_edge = (i_dir ? (mb_y <= b_interlaced) : (mb_x == 0));\
             int i_qpn, i, mbn_xy, mbn_8x8, mbn_4x4;\
-#ifdef _TMS320C6400
-            ALIGNED_ARRAY_4( uint8_t, bS, [4] );  /* filtering strength */\
-#else
             ALIGNED_4( uint8_t bS[4] );  /* filtering strength */\
-#endif
             if( i_edge )\
                 i_edge+= b_8x8_transform;\
             else\
