@@ -986,7 +986,17 @@ int getopt_long(int argc, char * const *argv, const char *optstring,
 {
   return _getopt_internal(argc, argv, optstring, long_options, opt_index, 0);
 }
-#endif
+#else
+int getopt_long (argc, argv, optstring, long_options, opt_index)
+     int argc;
+     char *const *argv;
+     const char *optstring;
+     const struct option *long_options;
+     int *opt_index;
+{
+  return _getopt_internal (argc, argv, optstring, long_options, opt_index, 0);
+}
+#endif /* _TMS320C6400 */
 
 #endif	/* Not ELIDE_CODE.  */
 

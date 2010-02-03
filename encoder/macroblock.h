@@ -27,7 +27,7 @@
 #include "common/macroblock.h"
 
 extern const int x264_lambda2_tab[52];
-extern const int x264_lambda_tab[52];
+extern const uint8_t x264_lambda_tab[52];
 
 void x264_rdo_init( void );
 
@@ -45,7 +45,7 @@ void x264_predict_lossless_16x16( x264_t *h, int i_mode );
 
 void x264_macroblock_encode      ( x264_t *h );
 void x264_macroblock_write_cabac ( x264_t *h, x264_cabac_t *cb );
-void x264_macroblock_write_cavlc ( x264_t *h, bs_t *s );
+void x264_macroblock_write_cavlc ( x264_t *h );
 
 void x264_macroblock_encode_p8x8( x264_t *h, int i8 );
 void x264_macroblock_encode_p4x4( x264_t *h, int i4 );

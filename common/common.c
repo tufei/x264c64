@@ -21,6 +21,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
+#include "common.h"
+#include "cpu.h"
+
 #include <stdarg.h>
 #include <ctype.h>
 
@@ -31,9 +34,6 @@
 #include <malloc.h>
 #endif /* _TMS320C6400 */
 #endif
-
-#include "common.h"
-#include "cpu.h"
 
 static void x264_log_default( void *, int, const char *, va_list );
 
@@ -215,6 +215,8 @@ void    x264_param_default( x264_param_t *param )
     param->b_repeat_headers = 1;
     param->b_annexb = 1;
     param->b_aud = 0;
+    param->b_vfr_input = 1;
+    param->b_dts_compress = 0;
 }
 
 static int parse_enum( const char *arg, const char * const *names, int *dst )
@@ -320,7 +322,7 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
         if( b_error )
         {
             char *buf = strdup(value);
-            char *tok, UNUSED *saveptr, *init;
+            char *tok, UNUSED *saveptr=NULL, *init;
             b_error = 0;
             p->cpu = 0;
             for( init=buf; (tok=strtok_r(init, ",", &saveptr)); init=NULL )
@@ -414,6 +416,8 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
             p->i_scenecut_threshold = atoi(value);
         }
     }
+    OPT("intra-refresh")
+        p->b_intra_refresh = atobool(value);
     OPT("bframes")
         p->i_bframe = atoi(value);
     OPT("b-adapt")
@@ -529,7 +533,7 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
     }
     OPT("log")
         p->i_log_level = atoi(value);
-#ifdef VISUALIZE
+#ifdef HAVE_VISUALIZE
     OPT("visualize")
         p->b_visualize = atobool(value);
 #endif
@@ -674,6 +678,8 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
         p->b_repeat_headers = atobool(value);
     OPT("annexb")
         p->b_annexb = atobool(value);
+    OPT("force-cfr")
+        p->b_vfr_input = !atobool(value);
     else
         return X264_PARAM_BAD_NAME;
 #undef OPT
@@ -971,8 +977,8 @@ char *x264_param2string( x264_param_t *p, int b_res )
     }
     s += sprintf( s, " wpredp=%d", p->analyse.i_weighted_pred > 0 ? p->analyse.i_weighted_pred : 0 );
 
-    s += sprintf( s, " keyint=%d keyint_min=%d scenecut=%d",
-                  p->i_keyint_max, p->i_keyint_min, p->i_scenecut_threshold );
+    s += sprintf( s, " keyint=%d keyint_min=%d scenecut=%d intra_refresh=%d",
+                  p->i_keyint_max, p->i_keyint_min, p->i_scenecut_threshold, p->b_intra_refresh );
 
     if( p->rc.b_mb_tree || p->rc.i_vbv_buffer_size )
         s += sprintf( s, " rc_lookahead=%d", p->rc.i_lookahead );

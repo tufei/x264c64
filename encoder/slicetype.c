@@ -121,7 +121,7 @@ static NOINLINE unsigned int x264_weight_cost( x264_t *h, x264_frame_t *fenc, ui
     int i_lines = fenc->i_lines_lowres;
     int i_width = fenc->i_width_lowres;
     uint8_t *fenc_plane = fenc->lowres[0];
-    ALIGNED_8( uint8_t buf[8*8] );
+    ALIGNED_ARRAY_8( uint8_t, buf,[8*8] );
     int pixoff = 0;
     int i_mb = 0;
 
@@ -230,14 +230,13 @@ void x264_weights_analyse( x264_t *h, x264_frame_t *fenc, x264_frame_t *ref, int
     if( weights[0].weightfn && b_lookahead )
     {
         //scale lowres in lookahead for slicetype_frame_cost
-        int i_padv = PADV<<h->param.b_interlaced;
         uint8_t *src = ref->buffer_lowres[0];
         uint8_t *dst = h->mb.p_weight_buf[0];
         int width = ref->i_width_lowres + PADH*2;
-        int height = ref->i_lines_lowres + i_padv*2;
+        int height = ref->i_lines_lowres + PADV*2;
         x264_weight_scale_plane( h, dst, ref->i_stride_lowres, src, ref->i_stride_lowres,
                                  width, height, &weights[0] );
-        fenc->weighted[0] = h->mb.p_weight_buf[0] + PADH + ref->i_stride_lowres * i_padv;
+        fenc->weighted[0] = h->mb.p_weight_buf[0] + PADH + ref->i_stride_lowres * PADV;
     }
 }
 
@@ -259,11 +258,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     int16_t (*fenc_mvs[2])[2] = { &frames[b]->lowres_mvs[0][b-p0-1][i_mb_xy], &frames[b]->lowres_mvs[1][p1-b-1][i_mb_xy] };
     int (*fenc_costs[2]) = { &frames[b]->lowres_mv_costs[0][b-p0-1][i_mb_xy], &frames[b]->lowres_mv_costs[1][p1-b-1][i_mb_xy] };
 
-#ifdef _TMS320C6400
-    ALIGNED_ARRAY_8( uint8_t, pix1, [9*FDEC_STRIDE] );
-#else
-    ALIGNED_8( uint8_t pix1[9*FDEC_STRIDE] );
-#endif
+    ALIGNED_ARRAY_8( uint8_t, pix1,[9*FDEC_STRIDE] );
     uint8_t *pix2 = pix1+8;
     x264_me_t m[2];
     int i_bcost = COST_MAX;
@@ -344,7 +339,7 @@ static int x264_slicetype_mb_cost( x264_t *h, x264_mb_analysis_t *a,
     if( b_bidir )
     {
         int16_t *mvr = fref1->lowres_mvs[0][p1-p0-1][i_mb_xy];
-        ALIGNED_8( int16_t dmv[2][2] );
+        ALIGNED_ARRAY_8( int16_t, dmv,[2],[2] );
 
         m[1].i_pixel = PIXEL_8x8;
         m[1].p_cost_mv = a->p_cost_mv;
@@ -981,7 +976,7 @@ static int scenecut_internal( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **f
     int icost = frame->i_cost_est[0][0];
     int pcost = frame->i_cost_est[p1-p0][0];
     float f_bias;
-    int i_gop_size = frame->i_frame - h->lookahead->i_last_idr;
+    int i_gop_size = frame->i_frame - h->lookahead->i_last_keyframe;
     float f_thresh_max = h->param.i_scenecut_threshold / 100.0;
     /* magic numbers pulled out of thin air */
     float f_thresh_min = f_thresh_max * h->param.i_keyint_min
@@ -990,7 +985,7 @@ static int scenecut_internal( x264_t *h, x264_mb_analysis_t *a, x264_frame_t **f
 
     if( h->param.i_keyint_min == h->param.i_keyint_max )
         f_thresh_min= f_thresh_max;
-    if( i_gop_size < h->param.i_keyint_min / 4 )
+    if( i_gop_size < h->param.i_keyint_min / 4 || h->param.b_intra_refresh )
         f_bias = f_thresh_min / 4;
     else if( i_gop_size <= h->param.i_keyint_min )
         f_bias = f_thresh_min * i_gop_size / h->param.i_keyint_min;
@@ -1090,11 +1085,11 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
     if( !j )
         return;
 
-    keyint_limit = h->param.i_keyint_max - frames[0]->i_frame + h->lookahead->i_last_idr - 1;
-    orig_num_frames = num_frames = X264_MIN( j, keyint_limit );
+    keyint_limit = h->param.i_keyint_max - frames[0]->i_frame + h->lookahead->i_last_keyframe - 1;
+    orig_num_frames = num_frames = h->param.b_intra_refresh ? j : X264_MIN( j, keyint_limit );
 
     x264_lowres_context_init( h, &a );
-    idr_frame_type = frames[1]->i_frame - h->lookahead->i_last_idr >= h->param.i_keyint_min ? X264_TYPE_IDR : X264_TYPE_I;
+    idr_frame_type = frames[1]->i_frame - h->lookahead->i_last_keyframe >= h->param.i_keyint_min ? X264_TYPE_IDR : X264_TYPE_I;
 
     /* This is important psy-wise: if we have a non-scenecut keyframe,
      * there will be significant visual artifacts if the frames just before
@@ -1233,16 +1228,17 @@ void x264_slicetype_analyse( x264_t *h, int keyframe )
         x264_macroblock_tree( h, &a, frames, X264_MIN(num_frames, h->param.i_keyint_max), keyframe );
 
     /* Enforce keyframe limit. */
-    for( j = 0; j < num_frames; j++ )
-    {
-        if( ((j-keyint_limit) % h->param.i_keyint_max) == 0 )
+    if( !h->param.b_intra_refresh )
+        for( j = 0; j < num_frames; j++ )
         {
-            if( j && h->param.i_keyint_max > 1 )
-                frames[j]->i_type = X264_TYPE_P;
-            frames[j+1]->i_type = X264_TYPE_IDR;
-            reset_start = X264_MIN( reset_start, j+2 );
+            if( ((j-keyint_limit) % h->param.i_keyint_max) == 0 )
+            {
+                if( j && h->param.i_keyint_max > 1 )
+                    frames[j]->i_type = X264_TYPE_P;
+                frames[j+1]->i_type = X264_TYPE_IDR;
+                reset_start = X264_MIN( reset_start, j+2 );
+            }
         }
-    }
 
     if( h->param.rc.i_vbv_buffer_size )
         x264_vbv_lookahead( h, &a, frames, num_frames, keyframe );
@@ -1297,7 +1293,7 @@ void x264_slicetype_decide( x264_t *h )
         }
 
         /* Limit GOP size */
-        if( frm->i_frame - h->lookahead->i_last_idr >= h->param.i_keyint_max )
+        if( (!h->param.b_intra_refresh || frm->i_frame == 0) && frm->i_frame - h->lookahead->i_last_keyframe >= h->param.i_keyint_max )
         {
             if( frm->i_type == X264_TYPE_AUTO )
                 frm->i_type = X264_TYPE_IDR;
@@ -1307,7 +1303,8 @@ void x264_slicetype_decide( x264_t *h )
         if( frm->i_type == X264_TYPE_IDR )
         {
             /* Close GOP */
-            h->lookahead->i_last_idr = frm->i_frame;
+            h->lookahead->i_last_keyframe = frm->i_frame;
+            frm->b_keyframe = 1;
             if( bframes > 0 )
             {
                 bframes--;
@@ -1394,23 +1391,29 @@ void x264_slicetype_decide( x264_t *h )
 
     /* shift sequence to coded order.
        use a small temporary list to avoid shifting the entire next buffer around */
-    int i_dts = h->lookahead->next.list[0]->i_frame;
+    int i_coded = h->lookahead->next.list[0]->i_frame;
     if( bframes )
     {
         int index[] = { brefs+1, 1 };
         for( i = 0; i < bframes; i++ )
-            frames[ index[h->lookahead->next.list[i]->i_type == X264_TYPE_BREF]++ ] = h->lookahead->next.list[i];
+        {
+            int idx = index[h->lookahead->next.list[i]->i_type == X264_TYPE_BREF]++;
+            frames[idx] = h->lookahead->next.list[i];
+            frames[idx]->i_reordered_pts = h->lookahead->next.list[idx]->i_pts;
+        }
         frames[0] = h->lookahead->next.list[bframes];
+        frames[0]->i_reordered_pts = h->lookahead->next.list[0]->i_pts;
         memcpy( h->lookahead->next.list, frames, (bframes+1) * sizeof(x264_frame_t*) );
     }
     for( i = 0; i <= bframes; i++ )
-         h->lookahead->next.list[i]->i_dts = i_dts++;
+         h->lookahead->next.list[i]->i_coded = i_coded++;
 }
 
 int x264_rc_analyse_slice( x264_t *h )
 {
     int p0=0, p1, b;
     int cost;
+    x264_emms();
 
 #ifdef _TMS320C6400
     x264_frame_t **frames;
@@ -1452,5 +1455,24 @@ int x264_rc_analyse_slice( x264_t *h )
     memcpy( h->fdec->i_row_satd, h->fenc->i_row_satd, h->sps->i_mb_height * sizeof(int) );
     if( !IS_X264_TYPE_I(h->fenc->i_type) )
         memcpy( h->fdec->i_row_satds[0][0], h->fenc->i_row_satds[0][0], h->sps->i_mb_height * sizeof(int) );
+
+    if( h->param.b_intra_refresh && h->param.rc.i_vbv_buffer_size && h->fenc->i_type == X264_TYPE_P )
+    {
+        int x, y;
+        int ip_factor = 256 * h->param.rc.f_ip_factor; /* fix8 */
+        for( y = 0; y < h->sps->i_mb_height; y++ )
+        {
+            int mb_xy = y * h->mb.i_mb_stride;
+            for( x = h->fdec->i_pir_start_col; x <= h->fdec->i_pir_end_col; x++, mb_xy++ )
+            {
+                int intra_cost = (h->fenc->i_intra_cost[mb_xy] * ip_factor) >> 8;
+                int inter_cost = h->fenc->lowres_costs[b-p0][p1-b][mb_xy];
+                int diff = intra_cost - inter_cost;
+                h->fdec->i_row_satd[y] += diff;
+                cost += diff;
+            }
+        }
+    }
+
     return cost;
 }

@@ -124,11 +124,11 @@ x264_frame_t *x264_frame_new( x264_t *h, int b_fdec )
             frame->i_stride_lowres = ALIGN( frame->i_width_lowres + 2*PADH, align );
             frame->i_lines_lowres = frame->i_lines[0]/2;
 
-            luma_plane_size = frame->i_stride_lowres * (frame->i_lines[0]/2 + 2*i_padv);
+            luma_plane_size = frame->i_stride_lowres * (frame->i_lines[0]/2 + 2*PADV);
 
             CHECKED_MALLOC( frame->buffer_lowres[0], 4 * luma_plane_size );
             for( i = 0; i < 4; i++ )
-                frame->lowres[i] = frame->buffer_lowres[0] + (frame->i_stride_lowres * i_padv + PADH) + i * luma_plane_size;
+                frame->lowres[i] = frame->buffer_lowres[0] + (frame->i_stride_lowres * PADV + PADH) + i * luma_plane_size;
 
             for( j = 0; j <= !!h->param.i_bframe; j++ )
                 for( i = 0; i <= h->param.i_bframe; i++ )
@@ -223,7 +223,7 @@ int x264_frame_copy_picture( x264_t *h, x264_frame_t *dst, x264_picture_t *src )
 
     dst->i_type     = src->i_type;
     dst->i_qpplus1  = src->i_qpplus1;
-    dst->i_pts      = src->i_pts;
+    dst->i_pts      = dst->i_reordered_pts = src->i_pts;
     dst->param      = src->param;
 
     for( i=0; i<3; i++ )
@@ -842,9 +842,10 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
     int stride2y  = stridey << b_interlaced;
     int strideuv  = h->fdec->i_stride[1];
     int stride2uv = strideuv << b_interlaced;
+    uint8_t (*nnz_backup)[16] = h->scratch_buffer;
 
     if( !h->pps->b_cabac && h->pps->b_transform_8x8_mode )
-        munge_cavlc_nnz( h, mb_y, h->mb.nnz_backup, munge_cavlc_nnz_row );
+        munge_cavlc_nnz( h, mb_y, nnz_backup, munge_cavlc_nnz_row );
 
     for( mb_x = 0; mb_x < h->sps->i_mb_width; mb_x += (~b_interlaced | mb_y)&1, mb_y ^= b_interlaced )
     {
@@ -1004,7 +1005,7 @@ void x264_frame_deblock_row( x264_t *h, int mb_y )
     }
 
     if( !h->pps->b_cabac && h->pps->b_transform_8x8_mode )
-        munge_cavlc_nnz( h, mb_y, h->mb.nnz_backup, restore_cavlc_nnz_row );
+        munge_cavlc_nnz( h, mb_y, nnz_backup, restore_cavlc_nnz_row );
 }
 #endif /* _TMS320C6400 */
 
@@ -1195,6 +1196,7 @@ x264_frame_t *x264_frame_pop_unused( x264_t *h, int b_fdec )
     frame->i_reference_count = 1;
     frame->b_intra_calculated = 0;
     frame->b_scenecut = 1;
+    frame->b_keyframe = 0;
 
     memset( frame->weight, 0, sizeof(frame->weight) );
     memset( frame->f_weighted_cost_delta, 0, sizeof(frame->f_weighted_cost_delta) );

@@ -1,10 +1,9 @@
 /*****************************************************************************
- * set.h: h264 encoder
+ * x264dll: x264 DLLMain for win32
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2009 x264 project
  *
- * Authors: Laurent Aimar <fenrir@via.ecp.fr>
- *          Loren Merritt <lorenm@u.washington.edu>
+ * Authors: Anton Mitrofanov <BugMaster@narod.ru>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,15 +20,32 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  *****************************************************************************/
 
-#ifndef X264_ENCODER_SET_H
-#define X264_ENCODER_SET_H
+#include "common/common.h"
+#include <windows.h>
 
-void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param );
-void x264_sps_write( bs_t *s, x264_sps_t *sps );
-void x264_pps_init( x264_pps_t *pps, int i_id, x264_param_t *param, x264_sps_t *sps );
-void x264_pps_write( bs_t *s, x264_pps_t *pps );
-void x264_sei_recovery_point_write( x264_t *h, bs_t *s, int recovery_frame_cnt );
-int  x264_sei_version_write( x264_t *h, bs_t *s );
-int  x264_validate_levels( x264_t *h, int verbose );
+/* Callback for our DLL so we can initialize pthread */
+BOOL WINAPI DllMain( HANDLE hinstDLL, DWORD fdwReason, LPVOID lpvReserved )
+{
+#ifdef PTW32_STATIC_LIB
+    switch( fdwReason )
+    {
+        case DLL_PROCESS_ATTACH:
+            pthread_win32_process_attach_np();
 
+        case DLL_THREAD_ATTACH:
+            pthread_win32_thread_attach_np();
+            break;
+
+        case DLL_THREAD_DETACH:
+            pthread_win32_thread_detach_np();
+            break;
+
+        case DLL_PROCESS_DETACH:
+            pthread_win32_thread_detach_np();
+            pthread_win32_process_detach_np();
+            break;
+    }
 #endif
+
+    return TRUE;
+}

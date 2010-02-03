@@ -27,11 +27,18 @@
 #define _LARGEFILE_SOURCE 1
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
+#include <sys/stat.h>
+
+#include "config.h"
 
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #else
 #include <inttypes.h>
+#endif
+
+#ifndef HAVE_LOG2F
+#define log2f(x) (logf((x))/0.693147180559945f)
 #endif
 
 #ifdef _WIN32
@@ -70,13 +77,26 @@
 #define ALIGNED_ARRAY_16( type, name, sub1, ... )\
     uint8_t name##_16 [sizeof(type sub1 __VA_ARGS__) + 16];\
     type (*name) __VA_ARGS__ = (void*)(name##_16 + (16 - ((intptr_t)name##_16 & 15)))
+#else /* _TMS320C6400 */
+// ARM compiliers don't reliably align stack variables
+// - EABI requires only 8 byte stack alignment to be maintained
+// - gcc can't align stack variables to more even if the stack were to be correctly aligned outside the function
+// - armcc can't either, but is nice enough to actually tell you so
+// - Apple gcc only maintains 4 byte alignment
+// - llvm can align the stack, but only in svn and (unrelated) it exposes bugs in all released GNU binutils...
+#if defined(ARCH_ARM) && defined(SYS_MACOSX)
+#define ALIGNED_ARRAY_8( type, name, sub1, ... )\
+    uint8_t name##_u [sizeof(type sub1 __VA_ARGS__) + 7]; \
+    type (*name) __VA_ARGS__ = (void*)((intptr_t)(name##_u+7) & ~7)
 #else
-// current arm compilers only maintain 8-byte stack alignment
-// and cannot align stack variables to more than 8-bytes
+#define ALIGNED_ARRAY_8( type, name, sub1, ... )\
+    ALIGNED_8( type name sub1 __VA_ARGS__ )
+#endif
+
 #ifdef ARCH_ARM
 #define ALIGNED_ARRAY_16( type, name, sub1, ... )\
-    ALIGNED_8( uint8_t name##_8 [sizeof(type sub1 __VA_ARGS__) + 8] );\
-    type (*name) __VA_ARGS__ = (void*)(name##_8 + ((intptr_t)name##_8 & 8))
+    uint8_t name##_u [sizeof(type sub1 __VA_ARGS__) + 15];\
+    type (*name) __VA_ARGS__ = (void*)((intptr_t)(name##_u+15) & ~15)
 #else
 #define ALIGNED_ARRAY_16( type, name, sub1, ... )\
     ALIGNED_16( type name sub1 __VA_ARGS__ )
@@ -163,6 +183,8 @@ static inline int x264_pthread_create( x264_pthread_t *t, void *a, void *(*f)(vo
 
 #define WORD_SIZE sizeof(void*)
 
+#define asm __asm__
+
 #if !defined(_WIN64) && !defined(__LP64__)
 #if defined(__INTEL_COMPILER)
 #define BROKEN_STACK_ALIGNMENT /* define it if stack is not mod16 */
@@ -231,7 +253,7 @@ static int ALWAYS_INLINE x264_clz( uint32_t x )
 static int ALWAYS_INLINE x264_clz( uint32_t x )
 {
     static uint8_t lut[16] = {4,3,2,2,1,1,1,1,0,0,0,0,0,0,0,0};
-    int y, z = ((x - 0x10000) >> 27) & 16;
+    int y, z = (((x >> 16) - 1) >> 27) & 16;
     x >>= z^16;
     z += y = ((x - 0x100) >> 28) & 8;
     x >>= y^8;

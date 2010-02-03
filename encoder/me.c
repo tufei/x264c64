@@ -32,7 +32,7 @@
  * and refine_* are run only on the winner.
  * the subme=8,9 values are much higher because any amount of satd search makes
  * up its time by reducing the number of qpel-rd iterations. */
-static const int subpel_iterations[][4] =
+static const uint8_t subpel_iterations[][4] =
    {{0,0,0,0},
     {1,1,0,0},
     {0,1,1,0},
@@ -46,7 +46,7 @@ static const int subpel_iterations[][4] =
     {0,0,4,10}};
 
 /* (x-1)%6 */
-static const int mod6m1[8] = {5,0,1,2,3,4,5,0};
+static const uint8_t mod6m1[8] = {5,0,1,2,3,4,5,0};
 /* radius 2 hexagon. repeated entries are to avoid having to compute mod6 every time. */
 static const int hex2[8][2] = {{-1,-2}, {-2,0}, {-1,2}, {1,2}, {2,0}, {1,-2}, {-1,-2}, {-2,0}};
 static const int square1[9][2] = {{0,0}, {0,-1}, {0,1}, {-1,0}, {1,0}, {-1,-1}, {-1,1}, {1,-1}, {1,1}};
@@ -540,7 +540,7 @@ me_hex2:
                     }
                 }
             } while( ++i <= i_me_range/4 );
-            if( bmy <= mv_y_max && bmy >= mv_y_min )
+            if( bmy <= mv_y_max && bmy >= mv_y_min && bmx <= mv_x_max && bmx >= mv_x_min )
                 goto me_hex2;
             break;
         }
@@ -620,8 +620,8 @@ me_hex2:
                             {
                                 COPY1_IF_LT( bsad, sad );
                                 mvsads[nmvsad].sad = sad + ycost;
-                                mvsads[nmvsad].mx = min_x+xs[i+j];
-                                mvsads[nmvsad].my = my;
+                                mvsads[nmvsad].mv[0] = min_x+xs[i+j];
+                                mvsads[nmvsad].mv[1] = my;
                                 nmvsad++;
                             }
                         }
@@ -635,8 +635,8 @@ me_hex2:
                         {
                             COPY1_IF_LT( bsad, sad );
                             mvsads[nmvsad].sad = sad + ycost;
-                            mvsads[nmvsad].mx = mx;
-                            mvsads[nmvsad].my = my;
+                            mvsads[nmvsad].mv[0] = mx;
+                            mvsads[nmvsad].mv[1] = my;
                             nmvsad++;
                         }
                     }
@@ -652,30 +652,39 @@ me_hex2:
                     for( i=0; i<nmvsad && mvsads[i].sad <= sad_thresh; i++ );
                     for( j=i; j<nmvsad; j++ )
                     {
-                        /* mvsad_t is not guaranteed to be 8 bytes on all archs, so check before using explicit write-combining */
-                        if( sizeof( mvsad_t ) == sizeof( uint64_t ) )
-                            CP64( &mvsads[i], &mvsads[j] );
+                        uint32_t sad;
+                        if( WORD_SIZE == 8 && sizeof(mvsad_t) == 8 )
+                        {
+                            uint64_t mvsad = M64( &mvsads[i] ) = M64( &mvsads[j] );
+#ifdef WORDS_BIGENDIAN
+                            mvsad >>= 32;
+#endif
+                            sad = mvsad;
+                        }
                         else
-                            mvsads[i] = mvsads[j];
-                        i += mvsads[j].sad <= sad_thresh;
+                        {
+                            sad = mvsads[j].sad;
+                            CP32( mvsads[i].mv, mvsads[j].mv );
+                            mvsads[i].sad = sad;
+                        }
+                        i += (sad - (sad_thresh+1)) >> 31;
                     }
                     nmvsad = i;
                 }
                 while( nmvsad > limit )
                 {
-                    int bsad = mvsads[0].sad;
                     int bi = 0;
                     for( i=1; i<nmvsad; i++ )
-                        COPY2_IF_GT( bsad, mvsads[i].sad, bi, i );
+                        if( mvsads[i].sad > mvsads[bi].sad )
+                            bi = i;
                     nmvsad--;
-                    mvsads[bi] = mvsads[nmvsad];
                     if( sizeof( mvsad_t ) == sizeof( uint64_t ) )
                         CP64( &mvsads[bi], &mvsads[nmvsad] );
                     else
                         mvsads[bi] = mvsads[nmvsad];
                 }
                 for( i=0; i<nmvsad; i++ )
-                    COST_MV( mvsads[i].mx, mvsads[i].my );
+                    COST_MV( mvsads[i].mv[0], mvsads[i].mv[1] );
             }
             else
             {
@@ -734,10 +743,15 @@ void x264_me_refine_qpel( x264_t *h, x264_me_t *m )
     int hpel = subpel_iterations[h->mb.i_subpel_refine][0];
     int qpel = subpel_iterations[h->mb.i_subpel_refine][1];
 
-    if( m->i_pixel <= PIXEL_8x8 && h->sh.i_type == SLICE_TYPE_P )
+    if( m->i_pixel <= PIXEL_8x8 )
         m->cost -= m->i_ref_cost;
 
     refine_subpel( h, m, hpel, qpel, NULL, 1 );
+}
+
+void x264_me_refine_qpel_refdupe( x264_t *h, x264_me_t *m, int *p_halfpel_thresh )
+{
+    refine_subpel( h, m, 0, X264_MIN( 2, subpel_iterations[h->mb.i_subpel_refine][3] ), p_halfpel_thresh, 0 );
 }
 
 #define COST_MV_SAD( mx, my ) \
@@ -854,7 +868,7 @@ static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_ite
     bdir = -1;
     for( i = qpel_iters; i > 0; i-- )
     {
-        if( bmy <= h->mb.mv_min_spel[1] || bmy >= h->mb.mv_max_spel[1] )
+        if( bmy <= h->mb.mv_min_spel[1] || bmy >= h->mb.mv_max_spel[1] || bmx <= h->mb.mv_min_spel[0] || bmx >= h->mb.mv_max_spel[0] )
             break;
         odir = bdir;
         omx = bmx;
@@ -909,13 +923,8 @@ static void ALWAYS_INLINE x264_me_refine_bidir( x264_t *h, x264_me_t *m0, x264_m
     const uint16_t *p_cost_m1x = m1->p_cost_mv - m1->mvp[0];
     const uint16_t *p_cost_m1y = m1->p_cost_mv - m1->mvp[1];
     ALIGNED_ARRAY_16( uint8_t, pixy_buf,[2],[9][16*16] );
-#ifdef _TMS320C6400
-    ALIGNED_ARRAY_8( uint8_t, pixu_buf, [2], [9][8*8] );
-    ALIGNED_ARRAY_8( uint8_t, pixv_buf, [2], [9][8*8] );
-#else
-    ALIGNED_8( uint8_t pixu_buf[2][9][8*8] );
-    ALIGNED_8( uint8_t pixv_buf[2][9][8*8] );
-#endif
+    ALIGNED_ARRAY_8( uint8_t, pixu_buf,[2],[9][8*8] );
+    ALIGNED_ARRAY_8( uint8_t, pixv_buf,[2],[9][8*8] );
     uint8_t *src0[9];
     uint8_t *src1[9];
     uint8_t *pix  = &h->mb.pic.p_fdec[0][(i8>>1)*8*FDEC_STRIDE+(i8&1)*8];
@@ -952,7 +961,9 @@ static void ALWAYS_INLINE x264_me_refine_bidir( x264_t *h, x264_me_t *m0, x264_m
     };
 
     if( bm0y < h->mb.mv_min_spel[1] + 8 || bm1y < h->mb.mv_min_spel[1] + 8 ||
-        bm0y > h->mb.mv_max_spel[1] - 8 || bm1y > h->mb.mv_max_spel[1] - 8 )
+        bm0y > h->mb.mv_max_spel[1] - 8 || bm1y > h->mb.mv_max_spel[1] - 8 ||
+        bm0x < h->mb.mv_min_spel[0] + 8 || bm1x < h->mb.mv_min_spel[0] + 8 ||
+        bm0x > h->mb.mv_max_spel[0] - 8 || bm1x > h->mb.mv_max_spel[0] - 8 )
         return;
 
     h->mc.memzero_aligned( visited, sizeof(uint8_t[8][8][8]) );
@@ -1122,8 +1133,8 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
         }
     }
 
-    if( bmy < h->mb.mv_min_spel[1] + 3 ||
-        bmy > h->mb.mv_max_spel[1] - 3 )
+    if( bmy < h->mb.mv_min_spel[1] + 3 || bmy > h->mb.mv_max_spel[1] - 3 ||
+        bmx < h->mb.mv_min_spel[0] + 3 || bmx > h->mb.mv_max_spel[0] - 3 )
     {
         h->mb.b_skip_mc = 0;
         return;

@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 80
+#define X264_BUILD 84
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -201,6 +201,8 @@ typedef struct x264_param_t
     int         i_keyint_max;       /* Force an IDR keyframe at this interval */
     int         i_keyint_min;       /* Scenecuts closer together than this are coded as I, not IDR. */
     int         i_scenecut_threshold; /* how aggressively to insert extra I frames */
+    int         b_intra_refresh;    /* Whether or not to use periodic intra refresh instead of IDR frames. */
+
     int         i_bframe;   /* how many b-frame between 2 references pictures */
     int         i_bframe_adaptive;
     int         i_bframe_bias;
@@ -311,6 +313,12 @@ typedef struct x264_param_t
     int b_annexb;               /* if set, place start codes (4 bytes) before NAL units,
                                  * otherwise place size (4 bytes) before NAL units. */
     int i_sps_id;               /* SPS and PPS id number */
+    int b_vfr_input;            /* VFR input */
+    int i_timebase_num;         /* Timebase numerator */
+    int i_timebase_den;         /* Timebase denominator */
+    int b_dts_compress;         /* DTS compression: this algorithm eliminates negative DTS
+                                 * by compressing them to be less than the second PTS.
+                                 * Warning: this will change the timebase! */
 
     /* Slicing parameters */
     int i_slice_max_size;    /* Max size per slice in bytes; includes estimated NAL overhead. */
@@ -380,8 +388,14 @@ typedef struct
     int     i_type;
     /* In: force quantizer for > 0 */
     int     i_qpplus1;
+    /* Out: whether this frame is a keyframe.  Important when using modes that result in
+     * SEI recovery points being used instead of IDR frames. */
+    int     b_keyframe;
     /* In: user pts, Out: pts of encoded picture (user)*/
     int64_t i_pts;
+    /* Out: frame dts. Since the pts of the first frame is always zero,
+     *      initial frames may have a negative dts which must be dealt with by any muxer */
+    int64_t i_dts;
     /* In: custom encoding parameters to be set from this frame forwards
            (in coded order, not display order). If NULL, continue using
            parameters from the previous frame.  Some parameters, such as
@@ -472,6 +486,14 @@ x264_t *x264_encoder_open( x264_param_t * );
  *      if the change should apply to some particular frame, use x264_picture_t->param instead.
  *      returns 0 on success, negative on parameter validation error. */
 int     x264_encoder_reconfig( x264_t *, x264_param_t * );
+/* x264_encoder_parameters:
+ *      copies the current internal set of parameters to the pointer provided
+ *      by the caller.  useful when the calling application needs to know
+ *      how x264_encoder_open has changed the parameters, or the current state
+ *      of the encoder after multiple x264_encoder_reconfig calls.
+ *      note that the data accessible through pointers in the returned param struct
+ *      (e.g. filenames) should not be modified by the calling application. */
+void    x264_encoder_parameters( x264_t *, x264_param_t * );
 /* x264_encoder_headers:
  *      return the SPS and PPS that will be used for the whole stream.
  *      if i_nal > 0, returns the total size of all NAL payloads.
