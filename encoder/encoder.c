@@ -89,7 +89,7 @@ static void x264_slice_header_init( x264_t *h, x264_slice_header_t *sh,
     x264_param_t *param = &h->param;
     int i;
 
-    /* First we fill all field */
+    /* First we fill all fields */
     sh->sps = sps;
     sh->pps = pps;
 
@@ -113,12 +113,24 @@ static void x264_slice_header_init( x264_t *h, x264_slice_header_t *sh,
 
     sh->i_redundant_pic_cnt = 0;
 
-    if( !h->mb.b_direct_auto_read )
+    h->mb.b_direct_auto_write = h->param.analyse.i_direct_mv_pred == X264_DIRECT_PRED_AUTO
+                                && h->param.i_bframe
+                                && ( h->param.rc.b_stat_write || !h->param.rc.b_stat_read );
+
+    if( !h->mb.b_direct_auto_read && sh->i_type == SLICE_TYPE_B )
     {
-        if( h->mb.b_direct_auto_write )
-            sh->b_direct_spatial_mv_pred = ( h->stat.i_direct_score[1] > h->stat.i_direct_score[0] );
+        if( h->fref1[0]->i_poc_l0ref0 == h->fref0[0]->i_poc )
+        {
+            if( h->mb.b_direct_auto_write )
+                sh->b_direct_spatial_mv_pred = ( h->stat.i_direct_score[1] > h->stat.i_direct_score[0] );
+            else
+                sh->b_direct_spatial_mv_pred = ( param->analyse.i_direct_mv_pred == X264_DIRECT_PRED_SPATIAL );
+        }
         else
-            sh->b_direct_spatial_mv_pred = ( param->analyse.i_direct_mv_pred == X264_DIRECT_PRED_SPATIAL );
+        {
+            h->mb.b_direct_auto_write = 0;
+            sh->b_direct_spatial_mv_pred = 1;
+        }
     }
     /* else b_direct_spatial_mv_pred was read from the 2pass statsfile */
 
@@ -438,11 +450,6 @@ static int x264_validate_parameters( x264_t *h )
             x264_log( h, X264_LOG_WARNING, "interlace + me=esa is not implemented\n" );
             h->param.analyse.i_me_method = X264_ME_UMH;
         }
-        if( h->param.analyse.i_direct_mv_pred > X264_DIRECT_PRED_SPATIAL )
-        {
-            x264_log( h, X264_LOG_WARNING, "interlace + direct=temporal is not implemented\n" );
-            h->param.analyse.i_direct_mv_pred = X264_DIRECT_PRED_SPATIAL;
-        }
         if( h->param.analyse.i_weighted_pred > 0 )
         {
             x264_log( h, X264_LOG_WARNING, "interlace + weightp is not implemented\n" );
@@ -515,6 +522,39 @@ static int x264_validate_parameters( x264_t *h )
     }
     h->param.rc.i_qp_max = x264_clip3( h->param.rc.i_qp_max, 0, 51 );
     h->param.rc.i_qp_min = x264_clip3( h->param.rc.i_qp_min, 0, h->param.rc.i_qp_max );
+    if( h->param.rc.i_vbv_buffer_size )
+    {
+        if( h->param.rc.i_rc_method == X264_RC_CQP )
+        {
+            x264_log( h, X264_LOG_WARNING, "VBV is incompatible with constant QP, ignored.\n" );
+            h->param.rc.i_vbv_max_bitrate = 0;
+            h->param.rc.i_vbv_buffer_size = 0;
+        }
+        else if( h->param.rc.i_vbv_max_bitrate == 0 )
+        {
+            if( h->param.rc.i_rc_method == X264_RC_ABR )
+            {
+                x264_log( h, X264_LOG_WARNING, "VBV maxrate unspecified, assuming CBR\n" );
+                h->param.rc.i_vbv_max_bitrate = h->param.rc.i_bitrate;
+            }
+            else
+            {
+                x264_log( h, X264_LOG_WARNING, "VBV bufsize set but maxrate unspecified, ignored\n" );
+                h->param.rc.i_vbv_buffer_size = 0;
+            }
+        }
+        else if( h->param.rc.i_vbv_max_bitrate < h->param.rc.i_bitrate &&
+                 h->param.rc.i_rc_method == X264_RC_ABR )
+        {
+            x264_log( h, X264_LOG_WARNING, "max bitrate less than average bitrate, assuming CBR\n" );
+            h->param.rc.i_vbv_max_bitrate = h->param.rc.i_bitrate;
+        }
+    }
+    else if( h->param.rc.i_vbv_max_bitrate )
+    {
+        x264_log( h, X264_LOG_WARNING, "VBV maxrate specified, but no bufsize, ignored\n" );
+        h->param.rc.i_vbv_max_bitrate = 0;
+    }
 
 #ifndef _TMS320C6400
     int max_slices = (h->param.i_height+((16<<h->param.b_interlaced)-1))/(16<<h->param.b_interlaced);
@@ -576,8 +616,6 @@ static int x264_validate_parameters( x264_t *h )
         x264_log( h, X264_LOG_WARNING, "ref > 1 + intra-refresh is not supported\n" );
         h->param.i_frame_reference = 1;
     }
-    if( h->param.b_intra_refresh )
-        h->param.i_keyint_max = X264_MIN( h->param.i_keyint_max, (h->param.i_width+15)/16 - 1 );
     h->param.i_keyint_min = x264_clip3( h->param.i_keyint_min, 1, h->param.i_keyint_max/2+1 );
     h->param.rc.i_lookahead = x264_clip3( h->param.rc.i_lookahead, 0, X264_LOOKAHEAD_MAX );
     {
@@ -606,10 +644,6 @@ static int x264_validate_parameters( x264_t *h )
 #else
     h->param.i_sync_lookahead = 0;
 #endif
-
-    h->mb.b_direct_auto_write = h->param.analyse.i_direct_mv_pred == X264_DIRECT_PRED_AUTO
-                                && h->param.i_bframe
-                                && ( h->param.rc.b_stat_write || !h->param.rc.b_stat_read );
 
     h->param.i_deblocking_filter_alphac0 = x264_clip3( h->param.i_deblocking_filter_alphac0, -6, 6 );
     h->param.i_deblocking_filter_beta    = x264_clip3( h->param.i_deblocking_filter_beta, -6, 6 );
@@ -669,8 +703,6 @@ static int x264_validate_parameters( x264_t *h )
     /* Psy trellis has a similar effect. */
     if( h->mb.i_psy_trellis )
         h->param.analyse.i_chroma_qp_offset -= h->param.analyse.f_psy_trellis < 0.25 ? 1 : 2;
-    else
-        h->mb.i_psy_trellis = 0;
     h->param.analyse.i_chroma_qp_offset = x264_clip3(h->param.analyse.i_chroma_qp_offset, -12, 12);
     h->param.rc.i_aq_mode = x264_clip3( h->param.rc.i_aq_mode, 0, 2 );
     h->param.rc.f_aq_strength = x264_clip3f( h->param.rc.f_aq_strength, 0, 3 );
@@ -1081,7 +1113,7 @@ fail:
  ****************************************************************************/
 int x264_encoder_reconfig( x264_t *h, x264_param_t *param )
 {
-    h = h->thread[h->i_thread_phase];
+    h = h->thread[h->thread[0]->i_thread_phase];
     x264_set_aspect_ratio( h, param, 0 );
 #define COPY(var) h->param.var = param->var
     COPY( i_frame_reference ); // but never uses more refs than initially specified
@@ -1120,11 +1152,30 @@ int x264_encoder_reconfig( x264_t *h, x264_param_t *param )
     COPY( i_slice_max_size );
     COPY( i_slice_max_mbs );
     COPY( i_slice_count );
+    /* VBV can't be turned on if it wasn't on to begin with */
+    if( h->param.rc.i_vbv_max_bitrate > 0 && h->param.rc.i_vbv_buffer_size > 0 &&
+          param->rc.i_vbv_max_bitrate > 0 &&   param->rc.i_vbv_buffer_size > 0 )
+    {
+        COPY( rc.i_vbv_max_bitrate );
+        COPY( rc.i_vbv_buffer_size );
+        COPY( rc.i_bitrate );
+    }
+    COPY( rc.f_rf_constant );
 #undef COPY
 
     mbcmp_init( h );
 
-    return x264_validate_parameters( h );
+    int ret = x264_validate_parameters( h );
+
+    /* Supported reconfiguration options (1-pass only):
+     * vbv-maxrate
+     * vbv-bufsize
+     * crf
+     * bitrate (CBR only) */
+    if( !ret )
+        x264_ratecontrol_init_reconfigurable( h, 0 );
+
+    return ret;
 }
 
 /****************************************************************************
@@ -2029,6 +2080,8 @@ static int x264_threaded_slices_write( x264_t *h )
     for( i = 0; i <= h->sps->i_mb_height; i++ )
         x264_fdec_filter_row( h, i );
 
+    x264_threads_merge_ratecontrol( h );
+
     for( i = 1; i < h->param.i_threads; i++ )
     {
         x264_t *t = h->thread[i];
@@ -2043,8 +2096,6 @@ static int x264_threaded_slices_write( x264_t *h )
         for( j = 0; j < (offsetof(x264_t,stat.frame.i_ssd) - offsetof(x264_t,stat.frame.i_mv_bits)) / sizeof(int); j++ )
             ((int*)&h->stat.frame)[j] += ((int*)&t->stat.frame)[j];
     }
-
-    x264_threads_merge_ratecontrol( h );
 
     return 0;
 }
@@ -2274,22 +2325,22 @@ int     x264_encoder_encode( x264_t *h,
     if( h->param.b_intra_refresh && h->fenc->i_type == X264_TYPE_P )
     {
         int pocdiff = (h->fdec->i_poc - h->fref0[0]->i_poc)/2;
-        float increment = ((float)h->sps->i_mb_width-1) / h->param.i_keyint_max;
+        float increment = X264_MAX( ((float)h->sps->i_mb_width-1) / h->param.i_keyint_max, 1 );
+        int max_position = (int)(increment * h->param.i_keyint_max);
         if( IS_X264_TYPE_I( h->fref0[0]->i_type ) )
             h->fdec->f_pir_position = 0;
         else
         {
-            if( h->fref0[0]->i_pir_end_col == h->sps->i_mb_width - 1 )
+            h->fdec->f_pir_position = h->fref0[0]->f_pir_position;
+            if( h->fdec->f_pir_position+0.5 >= max_position )
             {
                 h->fdec->f_pir_position = 0;
                 h->fenc->b_keyframe = 1;
             }
-            else
-                h->fdec->f_pir_position = h->fref0[0]->f_pir_position;
         }
         h->fdec->i_pir_start_col = h->fdec->f_pir_position+0.5;
         h->fdec->f_pir_position += increment * pocdiff;
-        h->fdec->i_pir_end_col = X264_MIN( h->fdec->f_pir_position+0.5, h->sps->i_mb_width-1 );
+        h->fdec->i_pir_end_col = h->fdec->f_pir_position+0.5;
     }
 
     /* Write SPS and PPS */
@@ -2325,8 +2376,9 @@ int     x264_encoder_encode( x264_t *h,
 
         if( h->fenc->i_type != X264_TYPE_IDR )
         {
+            int time_to_recovery = X264_MIN( h->sps->i_mb_width - 1, h->param.i_keyint_max ) + h->param.i_bframe;
             x264_nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
-            x264_sei_recovery_point_write( h, &h->out.bs, h->param.i_keyint_max );
+            x264_sei_recovery_point_write( h, &h->out.bs, time_to_recovery );
             x264_nal_end( h );
             overhead += h->out.nal[h->out.i_nal-1].i_payload + NALU_OVERHEAD;
         }
@@ -2345,6 +2397,9 @@ int     x264_encoder_encode( x264_t *h,
         x264_reference_build_list_optimal( h );
         x264_reference_check_reorder( h );
     }
+
+    if( h->i_ref0 )
+        h->fdec->i_poc_l0ref0 = h->fref0[0]->i_poc;
 
     if( h->sh.i_type == SLICE_TYPE_B )
         x264_macroblock_bipred_init( h );
@@ -2791,7 +2846,8 @@ void    x264_encoder_close  ( x264_t *h )
             x264_log( h, X264_LOG_INFO, "8x8 transform intra:%.1f%%%s\n", 100. * i_i8x8 / i_intra, buf );
         }
 
-        if( h->param.analyse.i_direct_mv_pred == X264_DIRECT_PRED_AUTO
+        if( (h->param.analyse.i_direct_mv_pred == X264_DIRECT_PRED_AUTO ||
+            (h->stat.i_direct_frames[0] && h->stat.i_direct_frames[1]))
             && h->stat.i_frame_count[SLICE_TYPE_B] )
         {
             x264_log( h, X264_LOG_INFO, "direct mvs  spatial:%.1f%% temporal:%.1f%%\n",

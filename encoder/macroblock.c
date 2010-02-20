@@ -46,30 +46,24 @@ static inline void zigzag_scan_2x2_dc( int16_t level[4], int16_t dct[4] )
     int d1 = dct[2] + dct[3]; \
     int d2 = dct[0] - dct[1]; \
     int d3 = dct[2] - dct[3]; \
-    int dmf = dequant_mf[i_qp%6][0]; \
-    int qbits = i_qp/6 - 5; \
-    if( qbits > 0 ) \
-    { \
-        dmf <<= qbits; \
-        qbits = 0; \
-    }
+    int dmf = dequant_mf[i_qp%6][0] << i_qp/6;
 
 static inline void idct_dequant_2x2_dc( int16_t dct[4], int16_t dct4x4[4][16], int dequant_mf[6][16], int i_qp )
 {
     IDCT_DEQUANT_START
-    dct4x4[0][0] = (d0 + d1) * dmf >> -qbits;
-    dct4x4[1][0] = (d0 - d1) * dmf >> -qbits;
-    dct4x4[2][0] = (d2 + d3) * dmf >> -qbits;
-    dct4x4[3][0] = (d2 - d3) * dmf >> -qbits;
+    dct4x4[0][0] = (d0 + d1) * dmf >> 5;
+    dct4x4[1][0] = (d0 - d1) * dmf >> 5;
+    dct4x4[2][0] = (d2 + d3) * dmf >> 5;
+    dct4x4[3][0] = (d2 - d3) * dmf >> 5;
 }
 
 static inline void idct_dequant_2x2_dconly( int16_t out[4], int16_t dct[4], int dequant_mf[6][16], int i_qp )
 {
     IDCT_DEQUANT_START
-    out[0] = (d0 + d1) * dmf >> -qbits;
-    out[1] = (d0 - d1) * dmf >> -qbits;
-    out[2] = (d2 + d3) * dmf >> -qbits;
-    out[3] = (d2 - d3) * dmf >> -qbits;
+    out[0] = (d0 + d1) * dmf >> 5;
+    out[1] = (d0 - d1) * dmf >> 5;
+    out[2] = (d2 + d3) * dmf >> 5;
+    out[3] = (d2 - d3) * dmf >> 5;
 }
 
 static inline void dct2x2dc( int16_t d[4], int16_t dct4x4[4][16] )
@@ -212,8 +206,7 @@ static void x264_mb_encode_i16x16( x264_t *h, int i_qp )
     ALIGNED_ARRAY_16( int16_t, dct_dc4x4,[16] );
 
     int i, nz;
-    int b_decimate = h->sh.i_type == SLICE_TYPE_B || (h->param.analyse.b_dct_decimate && h->sh.i_type == SLICE_TYPE_P);
-    int decimate_score = b_decimate ? 0 : 9;
+    int decimate_score = h->mb.b_dct_decimate ? 0 : 9;
 
     if( h->mb.b_lossless )
     {
@@ -346,7 +339,7 @@ static inline int x264_mb_optimize_chroma_dc( x264_t *h, int b_inter, int i_qp, 
 void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 {
     int i, ch, nz, nz_dc;
-    int b_decimate = b_inter && (h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate);
+    int b_decimate = b_inter && h->mb.b_dct_decimate;
     ALIGNED_ARRAY_16( int16_t, dct2x2,[4] );
     h->mb.i_cbp_chroma = 0;
 
@@ -611,7 +604,7 @@ void x264_macroblock_encode( x264_t *h )
 {
     int i_cbp_dc = 0;
     int i_qp = h->mb.i_qp;
-    int b_decimate = h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate;
+    int b_decimate = h->mb.b_dct_decimate;
     int b_force_no_skip = 0;
     int i,idx,nz;
     h->mb.i_cbp_luma = 0;
@@ -918,8 +911,7 @@ void x264_macroblock_encode( x264_t *h )
 
 /*****************************************************************************
  * x264_macroblock_probe_skip:
- *  Check if the current MB could be encoded as a [PB]_SKIP (it supposes you use
- *  the previous QP
+ *  Check if the current MB could be encoded as a [PB]_SKIP
  *****************************************************************************/
 int x264_macroblock_probe_skip( x264_t *h, int b_bidir )
 {
@@ -1056,7 +1048,7 @@ void x264_macroblock_encode_p8x8( x264_t *h, int i8 )
     int i_qp = h->mb.i_qp;
     uint8_t *p_fenc = h->mb.pic.p_fenc[0] + (i8&1)*8 + (i8>>1)*8*FENC_STRIDE;
     uint8_t *p_fdec = h->mb.pic.p_fdec[0] + (i8&1)*8 + (i8>>1)*8*FDEC_STRIDE;
-    int b_decimate = h->sh.i_type == SLICE_TYPE_B || h->param.analyse.b_dct_decimate;
+    int b_decimate = h->mb.b_dct_decimate;
     int nnz8x8 = 0;
     int ch, nz;
 

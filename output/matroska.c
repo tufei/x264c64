@@ -146,7 +146,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 
     memcpy( avcC+11+sps_size, pps, pps_size );
 
-    ret = mk_writeHeader( p_mkv->w, "x264", "V_MPEG4/ISO/AVC",
+    ret = mk_writeHeader( p_mkv->w, "x264" X264_VERSION, "V_MPEG4/ISO/AVC",
                           avcC, avcC_len, p_mkv->frame_duration, 50000,
                           p_mkv->width, p_mkv->height,
                           p_mkv->d_width, p_mkv->d_height );
@@ -185,7 +185,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     p_mkv->b_writing_frame = 0;
 
-    if( mk_set_frame_flags( p_mkv->w, i_stamp, p_picture->b_keyframe ) < 0 )
+    if( mk_set_frame_flags( p_mkv->w, i_stamp, p_picture->b_keyframe, p_picture->i_type == X264_TYPE_B ) < 0 )
         return -1;
 
     return i_size;
@@ -206,4 +206,4 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     return ret;
 }
 
-cli_output_t mkv_output = { open_file, set_param, write_headers, write_frame, close_file };
+const cli_output_t mkv_output = { open_file, set_param, write_headers, write_frame, close_file };

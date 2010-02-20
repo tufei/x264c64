@@ -46,6 +46,7 @@ typedef struct
     int i_ref;
     int       i_rd16x16;
     x264_me_t me16x16;
+    x264_me_t bi16x16;      /* for b16x16 BI mode, since MVs can differ from l0/l1 */
 
     /* 8x8 */
     int       i_cost8x8;
@@ -380,8 +381,12 @@ static void x264_mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int i_qp )
 
     h->mb.i_me_method = h->param.analyse.i_me_method;
     h->mb.i_subpel_refine = h->param.analyse.i_subpel_refine;
+    if( h->sh.i_type == SLICE_TYPE_B && (h->mb.i_subpel_refine == 6 || h->mb.i_subpel_refine == 8) )
+        h->mb.i_subpel_refine--;
     h->mb.b_chroma_me = h->param.analyse.b_chroma_me && h->sh.i_type == SLICE_TYPE_P
                         && h->mb.i_subpel_refine >= 5;
+    h->mb.b_dct_decimate = h->sh.i_type == SLICE_TYPE_B ||
+                          (h->param.analyse.b_dct_decimate && h->sh.i_type != SLICE_TYPE_I);
 
     h->mb.b_transform_8x8 = 0;
     h->mb.b_noise_reduction = 0;
@@ -1763,20 +1768,45 @@ static void x264_mb_analyse_inter_b16x16( x264_t *h, x264_mb_analysis_t *a )
     a->l1.me16x16.i_ref = a->l1.i_ref;
 
     /* get cost of BI mode */
+    int ref_costs = REF_COST( 0, a->l0.i_ref ) + REF_COST( 1, a->l1.i_ref );
+    h->mc.memcpy_aligned( &a->l0.bi16x16, &a->l0.me16x16, sizeof(x264_me_t) );
+    h->mc.memcpy_aligned( &a->l1.bi16x16, &a->l1.me16x16, sizeof(x264_me_t) );
     src0 = h->mc.get_ref( pix0, &stride0,
                           h->mb.pic.p_fref[0][a->l0.i_ref], h->mb.pic.i_stride[0],
-                          a->l0.me16x16.mv[0], a->l0.me16x16.mv[1], 16, 16, weight_none );
+                          a->l0.bi16x16.mv[0], a->l0.bi16x16.mv[1], 16, 16, weight_none );
     src1 = h->mc.get_ref( pix1, &stride1,
                           h->mb.pic.p_fref[1][a->l1.i_ref], h->mb.pic.i_stride[0],
-                          a->l1.me16x16.mv[0], a->l1.me16x16.mv[1], 16, 16, weight_none );
+                          a->l1.bi16x16.mv[0], a->l1.bi16x16.mv[1], 16, 16, weight_none );
 
     h->mc.avg[PIXEL_16x16]( pix0, 16, src0, stride0, src1, stride1, h->mb.bipred_weight[a->l0.i_ref][a->l1.i_ref] );
 
     a->i_cost16x16bi = h->pixf.mbcmp[PIXEL_16x16]( h->mb.pic.p_fenc[0], FENC_STRIDE, pix0, 16 )
-                     + REF_COST( 0, a->l0.i_ref )
-                     + REF_COST( 1, a->l1.i_ref )
-                     + a->l0.me16x16.cost_mv
-                     + a->l1.me16x16.cost_mv;
+                     + ref_costs
+                     + a->l0.bi16x16.cost_mv
+                     + a->l1.bi16x16.cost_mv;
+
+
+    /* Always try the 0,0,0,0 vector; helps avoid errant motion vectors in fades */
+    if( M32( a->l0.bi16x16.mv ) | M32( a->l1.bi16x16.mv ) )
+    {
+        int l0_mv_cost = a->l0.bi16x16.p_cost_mv[-a->l0.bi16x16.mvp[0]]
+                       + a->l0.bi16x16.p_cost_mv[-a->l0.bi16x16.mvp[1]];
+        int l1_mv_cost = a->l1.bi16x16.p_cost_mv[-a->l1.bi16x16.mvp[0]]
+                       + a->l1.bi16x16.p_cost_mv[-a->l1.bi16x16.mvp[1]];
+        h->mc.avg[PIXEL_16x16]( pix0, 16, h->mb.pic.p_fref[0][a->l0.i_ref][0], h->mb.pic.i_stride[0],
+                                h->mb.pic.p_fref[1][a->l1.i_ref][0], h->mb.pic.i_stride[0],
+                                h->mb.bipred_weight[a->l0.i_ref][a->l1.i_ref] );
+        int cost00 = h->pixf.mbcmp[PIXEL_16x16]( h->mb.pic.p_fenc[0], FENC_STRIDE, pix0, 16 )
+                   + ref_costs + l0_mv_cost + l1_mv_cost;
+        if( cost00 < a->i_cost16x16bi )
+        {
+            M32( a->l0.bi16x16.mv ) = 0;
+            M32( a->l1.bi16x16.mv ) = 0;
+            a->l0.bi16x16.cost_mv = l0_mv_cost;
+            a->l1.bi16x16.cost_mv = l1_mv_cost;
+            a->i_cost16x16bi = cost00;
+        }
+    }
 
     /* mb type cost */
     a->i_cost16x16bi   += a->i_lambda * i_mb_b_cost_table[B_BI_BI];
@@ -2267,7 +2297,7 @@ static void x264_refine_bidir( x264_t *h, x264_mb_analysis_t *a )
     {
         case D_16x16:
             if( h->mb.i_type == B_BI_BI )
-                x264_me_refine_bidir_satd( h, &a->l0.me16x16, &a->l1.me16x16, i_biweight );
+                x264_me_refine_bidir_satd( h, &a->l0.bi16x16, &a->l1.bi16x16, i_biweight );
             break;
         case D_16x8:
             for( i=0; i<2; i++ )
@@ -2339,9 +2369,10 @@ static inline void x264_mb_analyse_qp_rd( x264_t *h, x264_mb_analysis_t *a )
     int orig_qp = h->mb.i_qp, bqp = h->mb.i_qp;
     int last_qp_tried = 0;
     origcost = bcost = x264_rd_cost_mb( h, a->i_lambda2 );
+    int origcbp = h->mb.cbp[h->mb.i_mb_xy];
 
     /* If CBP is already zero, don't raise the quantizer any higher. */
-    for( direction = h->mb.cbp[h->mb.i_mb_xy] ? 1 : -1; direction >= -1; direction-=2 )
+    for( direction = origcbp ? 1 : -1; direction >= -1; direction-=2 )
     {
         /* Without psy-RD, require monotonicity when moving quant away from previous
          * macroblock's quant; allow 1 failure when moving quant towards previous quant.
@@ -2356,14 +2387,47 @@ static inline void x264_mb_analyse_qp_rd( x264_t *h, x264_mb_analysis_t *a )
         h->mb.i_qp = orig_qp;
         failures = 0;
         prevcost = origcost;
+
+        /* If the current QP results in an empty CBP, it's highly likely that lower QPs
+         * (up to a point) will too.  So, jump down to where the threshold will kick in
+         * and check the QP there.  If the CBP is still empty, skip the main loop.
+         * If it isn't empty, we would have ended up having to check this QP anyways,
+         * so as long as we store it for later lookup, we lose nothing. */
+        int already_checked_qp = -1;
+        int already_checked_cost = COST_MAX;
+        if( direction == -1 )
+        {
+            if( !origcbp )
+            {
+                h->mb.i_qp = X264_MAX( h->mb.i_qp - threshold - 1, h->param.rc.i_qp_min );
+                h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
+                already_checked_cost = x264_rd_cost_mb( h, a->i_lambda2 );
+                if( !h->mb.cbp[h->mb.i_mb_xy] )
+                {
+                    /* If our empty-CBP block is lower QP than the last QP,
+                     * the last QP almost surely doesn't have a CBP either. */
+                    if( h->mb.i_last_qp > h->mb.i_qp )
+                        last_qp_tried = 1;
+                    break;
+                }
+                already_checked_qp = h->mb.i_qp;
+                h->mb.i_qp = orig_qp;
+            }
+        }
+
         h->mb.i_qp += direction;
         while( h->mb.i_qp >= h->param.rc.i_qp_min && h->mb.i_qp <= h->param.rc.i_qp_max )
         {
             if( h->mb.i_last_qp == h->mb.i_qp )
                 last_qp_tried = 1;
-            h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
-            cost = x264_rd_cost_mb( h, a->i_lambda2 );
-            COPY2_IF_LT( bcost, cost, bqp, h->mb.i_qp );
+            if( h->mb.i_qp == already_checked_qp )
+                cost = already_checked_cost;
+            else
+            {
+                h->mb.i_chroma_qp = h->chroma_qp_table[h->mb.i_qp];
+                cost = x264_rd_cost_mb( h, a->i_lambda2 );
+                COPY2_IF_LT( bcost, cost, bqp, h->mb.i_qp );
+            }
 
             /* We can't assume that the costs are monotonic over QPs.
              * Tie case-as-failure seems to give better results. */
@@ -2881,8 +2945,8 @@ intra_analysis:
                 }
                 else if( i_type == B_BI_BI )
                 {
-                    x264_me_refine_qpel( h, &analysis.l0.me16x16 );
-                    x264_me_refine_qpel( h, &analysis.l1.me16x16 );
+                    x264_me_refine_qpel( h, &analysis.l0.bi16x16 );
+                    x264_me_refine_qpel( h, &analysis.l1.bi16x16 );
                 }
             }
             else if( i_partition == D_16x8 )
@@ -3000,7 +3064,7 @@ intra_analysis:
                         x264_me_refine_qpel_rd( h, &analysis.l1.me16x16, analysis.i_lambda2, 0, 1 );
                     }
                     else if( i_type == B_BI_BI )
-                        x264_me_refine_bidir_rd( h, &analysis.l0.me16x16, &analysis.l1.me16x16, i_biweight, 0, analysis.i_lambda2 );
+                        x264_me_refine_bidir_rd( h, &analysis.l0.bi16x16, &analysis.l1.bi16x16, i_biweight, 0, analysis.i_lambda2 );
                 }
                 else if( i_partition == D_16x8 )
                 {
@@ -3183,10 +3247,10 @@ static void x264_analyse_update_cache( x264_t *h, x264_mb_analysis_t *a  )
                     break;
                 case B_BI_BI:
                     x264_macroblock_cache_ref( h, 0, 0, 4, 4, 0, a->l0.i_ref );
-                    x264_macroblock_cache_mv_ptr( h, 0, 0, 4, 4, 0, a->l0.me16x16.mv );
+                    x264_macroblock_cache_mv_ptr( h, 0, 0, 4, 4, 0, a->l0.bi16x16.mv );
 
                     x264_macroblock_cache_ref( h, 0, 0, 4, 4, 1, a->l1.i_ref );
-                    x264_macroblock_cache_mv_ptr( h, 0, 0, 4, 4, 1, a->l1.me16x16.mv );
+                    x264_macroblock_cache_mv_ptr( h, 0, 0, 4, 4, 1, a->l1.bi16x16.mv );
                     break;
                 }
                 break;
