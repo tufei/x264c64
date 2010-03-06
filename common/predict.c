@@ -772,7 +772,7 @@ void x264_predict_16x16_init( int cpu, x264_predict_t pf[7] )
     x264_predict_16x16_init_mmx( cpu, pf );
 #endif
 
-#ifdef ARCH_PPC
+#ifdef HAVE_ALTIVEC
     if( cpu&X264_CPU_ALTIVEC )
     {
         x264_predict_16x16_init_altivec( pf );
@@ -802,7 +802,7 @@ void x264_predict_8x8c_init( int cpu, x264_predict_t pf[7] )
     x264_predict_8x8c_init_mmx( cpu, pf );
 #endif
 
-#ifdef ARCH_PPC
+#ifdef HAVE_ALTIVEC
     if( cpu&X264_CPU_ALTIVEC )
     {
         x264_predict_8x8c_init_altivec( pf );

@@ -141,6 +141,7 @@ struct x264_ratecontrol_t
     /* MBRC stuff */
     float frame_size_estimated; /* Access to this variable must be atomic: double is
                                  * not atomic on all arches we care about */
+    double frame_size_maximum;  /* Maximum frame size due to MinCR */
     double frame_size_planned;
     double slice_size_planned;
     double max_frame_error;
@@ -250,17 +251,20 @@ void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame )
 
     if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
     {
+        float avg_adj_pow2 = 0.f;
         for( mb_y = 0; mb_y < h->sps->i_mb_height; mb_y++ )
             for( mb_x = 0; mb_x < h->sps->i_mb_width; mb_x++ )
             {
                 uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
-                float qp_adj = x264_log2( energy + 2 );
-                qp_adj *= qp_adj;
+                float qp_adj = powf( energy + 1, 0.125f );
                 frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
                 avg_adj += qp_adj;
+                avg_adj_pow2 += qp_adj * qp_adj;
             }
         avg_adj /= h->mb.i_mb_count;
-        strength = h->param.rc.f_aq_strength * avg_adj * (1.f / 6000.f);
+        avg_adj_pow2 /= h->mb.i_mb_count;
+        strength = h->param.rc.f_aq_strength * avg_adj;
+        avg_adj = avg_adj - 0.5f * (avg_adj_pow2 - 14.f) / avg_adj;
     }
     else
         strength = h->param.rc.f_aq_strength * 1.0397f;
@@ -1047,6 +1051,24 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
         memset( h->fdec->i_row_bits, 0, h->sps->i_mb_height * sizeof(int) );
         rc->row_pred = &rc->row_preds[h->sh.i_type];
         update_vbv_plan( h, overhead );
+
+        const x264_level_t *l = x264_levels;
+        while( l->level_idc != 0 && l->level_idc != h->param.i_level_idc )
+            l++;
+
+        /* The spec has a bizarre special case for the first frame. */
+        if( h->i_frame == 0 )
+        {
+            //384 * ( Max( PicSizeInMbs, fR * MaxMBPS ) + MaxMBPS * ( tr( 0 ) - tr,n( 0 ) ) ) / MinCR
+            double fr = 1. / 172;
+            int pic_size_in_mbs = h->sps->i_mb_width * h->sps->i_mb_height;
+            rc->frame_size_maximum = 384 * 8 * X264_MAX( pic_size_in_mbs, fr*l->mbps ) / l->mincr;
+        }
+        else
+        {
+            //384 * MaxMBPS * ( tr( n ) - tr( n - 1 ) ) / MinCR
+            rc->frame_size_maximum = 384 * 8 * (1 / rc->fps) * l->mbps / l->mincr;
+        }
     }
 
     if( h->sh.i_type != SLICE_TYPE_B )
@@ -1085,15 +1107,15 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
 
     rc->qpa_rc =
     rc->qpa_aq = 0;
-    h->fdec->f_qp_avg_rc =
-    h->fdec->f_qp_avg_aq =
     rc->qpm =
     rc->qp = x264_clip3( (int)(q + 0.5), 0, 51 );
+    h->fdec->f_qp_avg_rc =
+    h->fdec->f_qp_avg_aq =
     rc->f_qpm = q;
     if( rce )
         rce->new_qp = rc->qp;
 
-    accum_p_qp_update( h, rc->qp );
+    accum_p_qp_update( h, rc->f_qpm );
 
     if( h->sh.i_type != SLICE_TYPE_B )
         rc->last_non_b_pict_type = h->sh.i_type;
@@ -1228,9 +1250,10 @@ void x264_ratecontrol_mb( x264_t *h, int bits )
             b1 = predict_row_size_sum( h, y, rc->qpm ) + size_of_other_slices;
         }
 
-        /* avoid VBV underflow */
+        /* avoid VBV underflow or MinCR violation */
         while( (rc->qpm < h->param.rc.i_qp_max)
-               && (rc->buffer_fill - b1 < rc->buffer_rate * rc->max_frame_error) )
+               && ((rc->buffer_fill - b1 < rc->buffer_rate * rc->max_frame_error) ||
+                   (rc->frame_size_maximum - b1 < rc->frame_size_maximum * rc->max_frame_error)))
         {
             rc->qpm ++;
             b1 = predict_row_size_sum( h, y, rc->qpm ) + size_of_other_slices;
@@ -1718,6 +1741,11 @@ static double clip_qscale( x264_t *h, int pict_type, double q )
             q = X264_MAX( q0, q );
         }
 
+        /* Apply MinCR restrictions */
+        double bits = predict_size( &rcc->pred[h->sh.i_type], q, rcc->last_satd );
+        if( bits > rcc->frame_size_maximum )
+            q *= bits / rcc->frame_size_maximum;
+
         /* Check B-frame complexity, and use up any bits that would
          * overflow before the next P-frame. */
         if( h->sh.i_type == SLICE_TYPE_P && !rcc->single_frame_vbv )
@@ -1821,6 +1849,7 @@ static float rate_estimate_qscale( x264_t *h )
         /* For row SATDs */
         if( rcc->b_vbv )
             rcc->last_satd = x264_rc_analyse_slice( h );
+        rcc->qp_novbv = q;
         return qp2qscale(q);
     }
     else
@@ -1934,13 +1963,18 @@ static float rate_estimate_qscale( x264_t *h )
 
                 q = get_qscale( h, &rce, rcc->wanted_bits_window / rcc->cplxr_sum, h->fenc->i_frame );
 
-                // FIXME is it simpler to keep track of wanted_bits in ratecontrol_end?
-                wanted_bits = i_frame_done * rcc->bitrate / rcc->fps;
-                if( wanted_bits > 0 )
+                /* ABR code can potentially be counterproductive in CBR, so just don't bother.
+                 * Don't run it if the frame complexity is zero either. */
+                if( !rcc->b_vbv_min_rate && rcc->last_satd )
                 {
-                    abr_buffer *= X264_MAX( 1, sqrt(i_frame_done/25) );
-                    overflow = x264_clip3f( 1.0 + (total_bits - wanted_bits) / abr_buffer, .5, 2 );
-                    q *= overflow;
+                    // FIXME is it simpler to keep track of wanted_bits in ratecontrol_end?
+                    wanted_bits = i_frame_done * rcc->bitrate / rcc->fps;
+                    if( wanted_bits > 0 )
+                    {
+                        abr_buffer *= X264_MAX( 1, sqrt(i_frame_done/25) );
+                        overflow = x264_clip3f( 1.0 + (total_bits - wanted_bits) / abr_buffer, .5, 2 );
+                        q *= overflow;
+                    }
                 }
             }
 

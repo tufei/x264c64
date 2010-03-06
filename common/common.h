@@ -164,7 +164,7 @@ int64_t x264_mdate( void );
  * the encoding options */
 char *x264_param2string( x264_param_t *p, int b_res );
 
-int x264_nal_encode( uint8_t *dst, int b_annexb, x264_nal_t *nal );
+int x264_nal_encode( uint8_t *dst, x264_nal_t *nal, int b_annexb, int b_long_startcode );
 
 /* log */
 void x264_log( x264_t *h, int i_level, const char *psz_fmt, ... );
@@ -214,13 +214,13 @@ static inline int x264_predictor_difference( int16_t (*mvc)[2], intptr_t i_mvc )
     return sum;
 }
 
-static inline uint32_t x264_cabac_amvd_sum( int16_t *mvdleft, int16_t *mvdtop )
+static inline uint16_t x264_cabac_mvd_sum( uint8_t *mvdleft, uint8_t *mvdtop )
 {
     int amvd0 = abs(mvdleft[0]) + abs(mvdtop[0]);
     int amvd1 = abs(mvdleft[1]) + abs(mvdtop[1]);
     amvd0 = (amvd0 > 2) + (amvd0 > 32);
     amvd1 = (amvd1 > 2) + (amvd1 > 32);
-    return amvd0 + (amvd1<<16);
+    return amvd0 + (amvd1<<8);
 }
 
 extern const uint8_t x264_exp2_lut[64];
@@ -562,6 +562,7 @@ struct x264_t
 
         /* mb table */
         int8_t  *type;                      /* mb type */
+        uint8_t *partition;                 /* mb partition */
         int8_t  *qp;                        /* mb qp */
         int16_t *cbp;                       /* mb cbp: 0x0?: luma, 0x?0: chroma, 0x100: luma dc, 0x0200 and 0x0400: chroma dc  (all set for PCM)*/
         int8_t  (*intra4x4_pred_mode)[8];   /* intra4x4 pred mode. for non I4x4 set to I_PRED_4x4_DC(2) */
@@ -569,7 +570,7 @@ struct x264_t
         uint8_t (*non_zero_count)[16+4+4];  /* nzc. for I_PCM set to 16 */
         int8_t  *chroma_pred_mode;          /* chroma_pred_mode. cabac only. for non intra I_PRED_CHROMA_DC(0) */
         int16_t (*mv[2])[2];                /* mb mv. set to 0 for intra mb */
-        int16_t (*mvd[2])[2];               /* mb mv difference with predict. set to 0 if intra. cabac only */
+        uint8_t (*mvd[2])[2];               /* absolute value of mb mv difference with predict, clipped to [0,33]. set to 0 if intra. cabac only */
         int8_t   *ref[2];                   /* mb ref. set to -1 if non used (intra or Lx only) */
         int16_t (*mvr[2][32])[2];           /* 16x16 mv for each possible ref */
         int8_t  *skipbp;                    /* block pattern for SKIP or DIRECT (sub)mbs. B-frames + cabac only */
@@ -625,11 +626,9 @@ struct x264_t
             ALIGNED_16( int16_t fenc_dct8[4][64] );
             ALIGNED_16( int16_t fenc_dct4[16][16] );
 
-            /* Psy RD SATD scores */
-            int fenc_satd[4][4];
-            int fenc_satd_sum;
-            int fenc_sa8d[2][2];
-            int fenc_sa8d_sum;
+            /* Psy RD SATD/SA8D scores cache */
+            ALIGNED_16( uint64_t fenc_hadamard_cache[9] );
+            ALIGNED_16( uint32_t fenc_satd_cache[32] );
 
             /* pointer over mb of the frame to be compressed */
             uint8_t *p_fenc[3];
@@ -663,13 +662,14 @@ struct x264_t
 
             /* 0 if not available */
             ALIGNED_16( int16_t mv[2][X264_SCAN8_SIZE][2] );
-            ALIGNED_8( int16_t mvd[2][X264_SCAN8_SIZE][2] );
+            ALIGNED_8( uint8_t mvd[2][X264_SCAN8_SIZE][2] );
 
             /* 1 if SKIP or DIRECT. set only for B-frames + CABAC */
             ALIGNED_4( int8_t skip[X264_SCAN8_SIZE] );
 
             ALIGNED_4( int16_t direct_mv[2][4][2] );
             ALIGNED_4( int8_t  direct_ref[2][4] );
+            int     direct_partition;
             ALIGNED_4( int16_t pskip_mv[2] );
 
             /* number of neighbors (top and left) that used 8x8 dct */
@@ -697,8 +697,8 @@ struct x264_t
         int     i_chroma_lambda2_offset;
 
         /* B_direct and weighted prediction */
-        int16_t dist_scale_factor_buf[2][16][2];
-        int16_t (*dist_scale_factor)[2];
+        int16_t dist_scale_factor_buf[2][32][4];
+        int16_t (*dist_scale_factor)[4];
         int8_t bipred_weight_buf[2][32][4];
         int8_t (*bipred_weight)[4];
         /* maps fref1[0]'s ref indices into the current list0 */
