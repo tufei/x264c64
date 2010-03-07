@@ -184,8 +184,13 @@ static int read_frame_internal( x264_picture_t *p_pic, y4m_hnd_t *h )
     header[slen] = 0;
     if( strncmp( header, Y4M_FRAME_MAGIC, slen ) )
     {
+#ifdef _TMS320C6400
+        fprintf( stderr, "y4m [error]: bad header magic (%08X <=> %s)\n",
+                 M32(header), header );
+#else
         fprintf( stderr, "y4m [error]: bad header magic (%"PRIx32" <=> %s)\n",
                  M32(header), header );
+#endif
         return -1;
     }
 

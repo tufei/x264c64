@@ -783,7 +783,7 @@ void x264_predict_16x16_init( int cpu, x264_predict_t pf[7] )
     x264_predict_16x16_init_arm( cpu, pf );
 #endif
 
-#ifdef _TMS320C6400
+#ifndef _TMS320C6400
     x264_predict_16x16_init_c64( pf );
 #endif
 }
@@ -813,7 +813,7 @@ void x264_predict_8x8c_init( int cpu, x264_predict_t pf[7] )
     x264_predict_8x8c_init_arm( cpu, pf );
 #endif
 
-#ifdef _TMS320C6400
+#ifndef _TMS320C6400
     x264_predict_8x8c_init_c64( pf );
 #endif
 }

@@ -211,11 +211,7 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         COST_MV_HPEL( bmx, bmy );
         for( i = 0; i < i_mvc; i++ )
         {
-#ifdef _TMS320C6400
-            if( _mem4_const(mvc[i]) && (bmv - _mem4_const(mvc[i])) )
-#else
             if( M32( mvc[i] ) && (bmv - M32( mvc[i] )) )
-#endif
             {
                 int mx = x264_clip3( mvc[i][0], mv_x_min*4, mv_x_max*4 );
                 int my = x264_clip3( mvc[i][1], mv_y_min*4, mv_y_max*4 );

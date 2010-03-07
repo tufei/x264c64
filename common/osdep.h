@@ -27,7 +27,9 @@
 #define _LARGEFILE_SOURCE 1
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
+#ifndef _TMS320C6400
 #include <sys/stat.h>
+#endif /* _TMS320C6400 */
 
 #include "config.h"
 

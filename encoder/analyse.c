@@ -596,7 +596,7 @@ static void inline x264_psy_trellis_init( x264_t *h, int do_both_dct )
 #endif
 
 #ifdef _TMS320C6400
-    memset(zero, 0, sizeof(zero));
+    memset(zero, 0, 16 * FDEC_STRIDE * sizeof(uint8_t));  /* WARNING: zero is not a static pointer */
 #endif
     if( do_both_dct || h->mb.b_transform_8x8 )
         h->dctf.sub16x16_dct8( h->mb.pic.fenc_dct8, h->mb.pic.p_fenc[0], zero );

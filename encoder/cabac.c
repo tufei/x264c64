@@ -624,13 +624,7 @@ static void block_residual_write_cabac( x264_t *h, x264_cabac_t *cb, int i_ctxBl
         i_coeff--;
 
         /* write coeff_abs - 1 */
-#ifdef _TMS320C6400
-        i_prefix = 14;
-        if(i_coeff_abs_m1[i_coeff] < i_prefix)
-            i_prefix = i_coeff_abs_m1[i_coeff]; 
-#else
         i_prefix = X264_MIN( i_coeff_abs_m1[i_coeff], 14 );
-#endif
         ctx = coeff_abs_level1_ctx[node_ctx] + i_ctx_level;
 
         if( i_prefix )

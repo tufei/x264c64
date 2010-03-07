@@ -1383,7 +1383,11 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     ticks_per_frame = (int64_t)param->i_timebase_den * param->i_fps_den / param->i_timebase_num / param->i_fps_num;
     if( ticks_per_frame < 1 )
     {
+#ifdef _TMS320C6400
+        fprintf( stderr, "x264 [error]: ticks_per_frame invalid: %lld\n", ticks_per_frame );
+#else
         fprintf( stderr, "x264 [error]: ticks_per_frame invalid: %"PRId64"\n", ticks_per_frame );
+#endif
         return -1;
     }
 
@@ -1405,7 +1409,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
 
     /* Encode frames */
 #ifdef _TMS320C6400
-    for( i_frame = 0, i_frame_output = 0; b_ctrl_c == 0 && (i_frame < i_frame_total || i_frame_total == 0); )
+    for( i_frame = 0, i_frame_output = 0; i_frame < i_frame_total || i_frame_total == 0; )
     {
         int ret_read;
 
@@ -1428,7 +1432,11 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
             if( param->i_log_level >= X264_LOG_WARNING )
             {
                 if( param->i_log_level >= X264_LOG_DEBUG || pts_warning_cnt < MAX_PTS_WARNING )
+#ifdef _TMS320C6400
+                    fprintf( stderr, "x264 [warning]: non-strictly-monotonic pts at frame %d (%lld <= %lld)\n",
+#else
                     fprintf( stderr, "x264 [warning]: non-strictly-monotonic pts at frame %d (%"PRId64" <= %"PRId64")\n",
+#endif
                              i_frame, pic.i_pts * dts_compress_multiplier, largest_pts * dts_compress_multiplier );
                 else if( pts_warning_cnt == MAX_PTS_WARNING )
                     fprintf( stderr, "x264 [warning]: too many nonmonotonic pts warnings, suppressing further ones\n" );
